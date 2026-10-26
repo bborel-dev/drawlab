@@ -1,0 +1,57 @@
+.studio {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.studio-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.studio-header h1 {
+  margin: 0;
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-size: 2.5rem;
+}
+
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.panel {
+  margin: 0;
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+}
+
+.panel figcaption {
+  margin-bottom: 12px;
+  font-size: 0.875rem;
+  color: #6b6560;
+}
+
+.panel img,
+.drawing svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.error {
+  color: #b3261e;
+}
+
+@media (max-width: 800px) {
+  .comparison {
+    grid-template-columns: 1fr;
+  }
+}
