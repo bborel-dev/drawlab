@@ -1,0 +1,60 @@
+{
+  "elements": [
+    {
+      "description": "Light blue rectangular backdrop filling the entire sky area.",
+      "name": "sky-background",
+      "sam_prompt": "light blue sky"
+    },
+    {
+      "description": "Bright yellow solid circle in the upper right sky.",
+      "name": "sun-body",
+      "sam_prompt": "yellow sun"
+    },
+    {
+      "description": "Pale green rounded hill stretching across the left background.",
+      "name": "left-hill",
+      "sam_prompt": "light green back hill"
+    },
+    {
+      "description": "Darker green rounded hill in the right foreground.",
+      "name": "right-hill",
+      "sam_prompt": "dark green front hill"
+    },
+    {
+      "description": "Beige square base forming the house walls.",
+      "name": "house-body",
+      "sam_prompt": "beige house walls"
+    },
+    {
+      "description": "Red triangular shape capping the house as a roof.",
+      "name": "house-roof",
+      "sam_prompt": "red triangular roof"
+    },
+    {
+      "description": "Dark brown narrow vertical rectangle forming the tree trunk.",
+      "name": "tree-trunk",
+      "sam_prompt": "brown tree trunk"
+    },
+    {
+      "description": "Dark green solid circle forming the tree foliage.",
+      "name": "tree-canopy",
+      "sam_prompt": "green round tree top"
+    },
+    {
+      "description": "Dark brown small vertical rectangle for the house door.",
+      "name": "house-door",
+      "sam_prompt": "brown house door"
+    }
+  ],
+  "palette": [
+    "#C6EAF3",
+    "#FFC93C",
+    "#7ABC68",
+    "#5C9A52",
+    "#E8DAC0",
+    "#C94E4E",
+    "#5D3A28",
+    "#3E7E3D"
+  ],
+  "style": "flat minimalist vector illustration"
+}
