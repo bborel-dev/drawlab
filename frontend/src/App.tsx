@@ -1,5 +1,6 @@
 import { useState, type ChangeEvent } from 'react'
 import { traceImage } from './api'
+import DrawingCanvas from './DrawingCanvas'
 import './App.css'
 
 function App() {
@@ -7,6 +8,7 @@ function App() {
   const [svg, setSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isTracing, setIsTracing] = useState(false)
+  const [replayCount, setReplayCount] = useState(0)
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -37,8 +39,15 @@ function App() {
           {sourceUrl && <img src={sourceUrl} alt="Original upload" />}
         </figure>
         <figure className="panel">
-          <figcaption>{isTracing ? 'Drawing…' : 'Drawing'}</figcaption>
-          {svg && <div className="drawing" dangerouslySetInnerHTML={{ __html: svg }} />}
+          <figcaption>
+            {isTracing ? 'Drawing…' : 'Drawing'}
+            {svg && (
+              <button type="button" onClick={() => setReplayCount((count) => count + 1)}>
+                Replay
+              </button>
+            )}
+          </figcaption>
+          {svg && <DrawingCanvas key={replayCount} svg={svg} />}
         </figure>
       </section>
     </main>
