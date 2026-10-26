@@ -1,60 +1,78 @@
 {
+  "style": "flat minimalist vector illustration",
+  "palette": ["#C6EAF3", "#FFC93C", "#7ABC68", "#5C9A52", "#E8DAC0", "#C94E4E", "#5D3A28", "#3E7E3D"],
   "elements": [
     {
-      "description": "Light blue rectangular backdrop filling the entire sky area.",
       "name": "sky-background",
-      "sam_prompt": "light blue sky"
+      "description": "Light blue backdrop filling the entire sky area.",
+      "sam_prompt": "sky",
+      "kind": "surface",
+      "center_x": 0.5,
+      "center_y": 0.3
     },
     {
-      "description": "Bright yellow solid circle in the upper right sky.",
-      "name": "sun-body",
-      "sam_prompt": "yellow sun"
-    },
-    {
-      "description": "Pale green rounded hill stretching across the left background.",
       "name": "left-hill",
-      "sam_prompt": "light green back hill"
+      "description": "Pale green rounded hill stretching across the left background.",
+      "sam_prompt": "hill",
+      "kind": "surface",
+      "center_x": 0.2,
+      "center_y": 0.85
     },
     {
-      "description": "Darker green rounded hill in the right foreground.",
       "name": "right-hill",
-      "sam_prompt": "dark green front hill"
+      "description": "Darker green rounded hill in the right foreground.",
+      "sam_prompt": "hill",
+      "kind": "surface",
+      "center_x": 0.75,
+      "center_y": 0.85
     },
     {
-      "description": "Beige square base forming the house walls.",
+      "name": "sun-body",
+      "description": "Bright yellow solid circle in the upper right sky.",
+      "sam_prompt": "sun",
+      "kind": "object",
+      "center_x": 0.78,
+      "center_y": 0.23
+    },
+    {
       "name": "house-body",
-      "sam_prompt": "beige house walls"
+      "description": "Beige square base forming the house walls.",
+      "sam_prompt": "house",
+      "kind": "object",
+      "center_x": 0.23,
+      "center_y": 0.76
     },
     {
-      "description": "Red triangular shape capping the house as a roof.",
       "name": "house-roof",
-      "sam_prompt": "red triangular roof"
+      "description": "Red triangular shape capping the house as a roof.",
+      "sam_prompt": "roof",
+      "kind": "object",
+      "center_x": 0.23,
+      "center_y": 0.58
     },
     {
-      "description": "Dark brown narrow vertical rectangle forming the tree trunk.",
       "name": "tree-trunk",
-      "sam_prompt": "brown tree trunk"
+      "description": "Dark brown narrow vertical rectangle forming the tree trunk.",
+      "sam_prompt": "tree trunk",
+      "kind": "object",
+      "center_x": 0.74,
+      "center_y": 0.73
     },
     {
-      "description": "Dark green solid circle forming the tree foliage.",
       "name": "tree-canopy",
-      "sam_prompt": "green round tree top"
+      "description": "Dark green solid circle forming the tree foliage.",
+      "sam_prompt": "tree",
+      "kind": "object",
+      "center_x": 0.74,
+      "center_y": 0.59
     },
     {
-      "description": "Dark brown small vertical rectangle for the house door.",
       "name": "house-door",
-      "sam_prompt": "brown house door"
+      "description": "Dark brown small vertical rectangle for the house door.",
+      "sam_prompt": "door",
+      "kind": "object",
+      "center_x": 0.24,
+      "center_y": 0.8
     }
-  ],
-  "palette": [
-    "#C6EAF3",
-    "#FFC93C",
-    "#7ABC68",
-    "#5C9A52",
-    "#E8DAC0",
-    "#C94E4E",
-    "#5D3A28",
-    "#3E7E3D"
-  ],
-  "style": "flat minimalist vector illustration"
+  ]
 }
