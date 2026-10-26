@@ -2,3 +2,7 @@ python-dotenv==1.2.4
 openai==3.38.0
 meta-sam-parser==0.1.0
 pillow==13.0.0
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+vtracer==0.6.15
