@@ -7,7 +7,7 @@ from app.images import to_png_bytes
 
 MAX_TRACE_SIDE = 3072
 PATH_PRECISION = 2
-SVG_SIZE_PATTERN = re.compile(r'<svg([^>]*?) width="(\d+)" height="(\d+)"')
+PATH_PATTERN = re.compile(r"<path [^>]*/>")
 
 
 def downscale_for_tracing(image: Image.Image) -> Image.Image:
@@ -16,11 +16,19 @@ def downscale_for_tracing(image: Image.Image) -> Image.Image:
     return trace_image
 
 
-def add_view_box(svg: str) -> str:
-    return SVG_SIZE_PATTERN.sub(r'<svg\1 width="\2" height="\3" viewBox="0 0 \2 \3"', svg, count=1)
+def trace_paths(image: Image.Image) -> list[str]:
+    svg = vtracer.convert_raw_image_to_svg(to_png_bytes(image), img_format="png", path_precision=PATH_PRECISION)
+    return PATH_PATTERN.findall(svg)
+
+
+def svg_document(size: tuple[int, int], body: str) -> str:
+    width, height = size
+    return (
+        f'<svg version="1.1" xmlns="http://www.w3.org/2000/svg" '
+        f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">{body}</svg>'
+    )
 
 
 def trace_to_svg(image: Image.Image) -> str:
-    png = to_png_bytes(downscale_for_tracing(image))
-    svg = vtracer.convert_raw_image_to_svg(png, img_format="png", path_precision=PATH_PRECISION)
-    return add_view_box(svg)
+    trace_image = downscale_for_tracing(image)
+    return svg_document(trace_image.size, "".join(trace_paths(trace_image)))

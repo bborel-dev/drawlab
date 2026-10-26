@@ -6,10 +6,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
-from PIL import Image, ImageChops, ImageDraw
+import io
+
+import resvg_py
+from PIL import Image, ImageChops, ImageDraw, ImageStat
 
 from app.agents.art_director import ArtDirection, ask_art_director, parse_art_direction
 from app.agents.cutter import Cut, cut_elements, mock_cut_elements
+from app.agents.illustrator import Layer, assemble_svg, draw_layers
+from app.tracing import downscale_for_tracing
 from app.budget import CallBudget
 from app.config import load_settings
 from app.fixtures import load_art_direction
@@ -64,6 +69,16 @@ def coverage(cuts: list[Cut], size: tuple[int, int]) -> float:
     return sum(union.histogram()[1:]) / (size[0] * size[1])
 
 
+def drawing_error(svg: str, reference: Image.Image) -> float:
+    rendered = Image.open(io.BytesIO(resvg_py.svg_to_bytes(svg_string=svg, background="#ffffff"))).convert("RGB")
+    return ImageStat.Stat(ImageChops.difference(reference, rendered).convert("L")).mean[0]
+
+
+def report_layers(layers: list[Layer]) -> None:
+    for layer in layers:
+        print(f"[layer] {layer.name:30s} paths={layer.path_count}")
+
+
 def main(image_path: Path) -> None:
     logging.basicConfig(level=logging.INFO, format="%(name)s %(message)s")
     image = open_image(image_path.read_bytes())
@@ -74,7 +89,14 @@ def main(image_path: Path) -> None:
     (output_dir / "art-direction.json").write_text(json.dumps(asdict(direction), indent=2), encoding="utf-8")
     build_contact_sheet(model_image, cuts).save(output_dir / "contact-sheet.png")
     found = sum(1 for cut in cuts if cut.mask)
-    print(f"[done] objects={len(cuts)} found={found} object_coverage={coverage(cuts, model_image.size):.1%}")
+    print(f"[cutter] objects={len(cuts)} found={found} object_coverage={coverage(cuts, model_image.size):.1%}")
+
+    layers = list(draw_layers(image, direction, cuts))
+    trace_image = downscale_for_tracing(image)
+    svg = assemble_svg(trace_image.size, layers)
+    (output_dir / "drawing.svg").write_text(svg, encoding="utf-8")
+    report_layers(layers)
+    print(f"[illustrator] layers={len(layers)} size={len(svg) // 1024}KB error={drawing_error(svg, trace_image):.2f}")
     print(f"[done] calls={budget.calls} cost=${budget.cost_usd:.4f} outputs={output_dir}")
 
 
