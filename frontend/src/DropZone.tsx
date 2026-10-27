@@ -35,11 +35,11 @@ function DropZone({ onFile }: DropZoneProps) {
       onDrop={handleDrop}
     >
       <span className="drop-icon" aria-hidden="true">
-        <svg width="24" height="24" viewBox="0 0 24 24">
+        <svg width="20" height="20" viewBox="0 0 24 24">
           <path
             d="M12 16 V5 M7 10 L12 5 L17 10 M5 19 H19"
             fill="none"
-            stroke="#0866FF"
+            stroke="#1C1E21"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"

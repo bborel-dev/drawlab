@@ -123,7 +123,7 @@ function ConverterPage() {
 
   if (phase === 'empty' || !source) {
     return (
-      <main className="converter converter-empty">
+      <main className="converter converter-empty glass">
         <h1>
           Turn any image into
           <br />
@@ -151,12 +151,12 @@ function ConverterPage() {
   })
 
   return (
-    <main className="converter">
+    <main className="converter glass">
       <div className="converter-row">
         <div className="file-info">
           <span className="file-name">{source.name}</span>
           {phase === 'drawing' ? (
-            <span className="badge badge-blue">Drawing</span>
+            <span className="badge badge-neutral">Drawing</span>
           ) : (
             <span className="badge badge-green">Done in {seconds} s</span>
           )}
