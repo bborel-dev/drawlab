@@ -18,10 +18,14 @@ export type AgentEvent = {
 const EVENT_SEPARATOR = '\n\n'
 const DATA_PREFIX = 'data: '
 
-export async function streamDrawing(image: File, onEvent: (event: AgentEvent) => void): Promise<void> {
+export async function streamDrawing(
+  image: File,
+  onEvent: (event: AgentEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
   const body = new FormData()
   body.append('image', image)
-  const response = await fetch('/api/draw', { method: 'POST', body })
+  const response = await fetch('/api/draw', { method: 'POST', body, signal })
   if (!response.ok || !response.body) {
     throw new Error(`Drawing failed (${response.status})`)
   }
