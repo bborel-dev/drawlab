@@ -1,28 +1,37 @@
 import { useState, type ChangeEvent } from 'react'
-import { traceImage } from './api'
+import { streamDrawing, type AgentEvent, type Canvas } from './api'
 import DrawingCanvas from './DrawingCanvas'
 import './App.css'
 
 function App() {
   const [sourceUrl, setSourceUrl] = useState<string | null>(null)
-  const [svg, setSvg] = useState<string | null>(null)
+  const [canvas, setCanvas] = useState<Canvas | null>(null)
+  const [layers, setLayers] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [isTracing, setIsTracing] = useState(false)
+  const [isDrawing, setIsDrawing] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
+
+  function handleEvent(event: AgentEvent) {
+    if (event.canvas) setCanvas(event.canvas)
+    const layer = event.layer
+    if (layer) setLayers((current) => [...current, layer])
+    if (event.status === 'error') setError(event.message)
+  }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
     setSourceUrl(URL.createObjectURL(file))
-    setSvg(null)
+    setCanvas(null)
+    setLayers([])
     setError(null)
-    setIsTracing(true)
+    setIsDrawing(true)
     try {
-      setSvg(await traceImage(file))
+      await streamDrawing(file, handleEvent)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Tracing failed')
+      setError(failure instanceof Error ? failure.message : 'Drawing failed')
     } finally {
-      setIsTracing(false)
+      setIsDrawing(false)
     }
   }
 
@@ -40,14 +49,14 @@ function App() {
         </figure>
         <figure className="panel">
           <figcaption>
-            {isTracing ? 'Drawing…' : 'Drawing'}
-            {svg && (
+            {isDrawing ? 'Drawing…' : 'Drawing'}
+            {!isDrawing && layers.length > 0 && (
               <button type="button" onClick={() => setReplayCount((count) => count + 1)}>
                 Replay
               </button>
             )}
           </figcaption>
-          {svg && <DrawingCanvas key={replayCount} svg={svg} />}
+          {canvas && <DrawingCanvas key={replayCount} canvas={canvas} layers={layers} />}
         </figure>
       </section>
     </main>

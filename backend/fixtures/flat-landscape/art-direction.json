@@ -1,78 +1,87 @@
 {
   "style": "flat minimalist vector illustration",
-  "palette": ["#C6EAF3", "#FFC93C", "#7ABC68", "#5C9A52", "#E8DAC0", "#C94E4E", "#5D3A28", "#3E7E3D"],
+  "palette": [
+    "#C8EAF2",
+    "#FFC641",
+    "#77C172",
+    "#5FA95F",
+    "#EEE4C8",
+    "#D14D4D",
+    "#4E2B1E",
+    "#3E7D44"
+  ],
   "elements": [
     {
       "name": "sky-background",
-      "description": "Light blue backdrop filling the entire sky area.",
+      "description": "Pale light blue rectangular area covering the upper sky.",
       "sam_prompt": "sky",
       "kind": "surface",
       "center_x": 0.5,
       "center_y": 0.3
     },
     {
-      "name": "left-hill",
-      "description": "Pale green rounded hill stretching across the left background.",
-      "sam_prompt": "hill",
+      "name": "distant-hill",
+      "description": "Light green rounded hill occupying the left and lower background.",
+      "sam_prompt": "grassy hill",
       "kind": "surface",
-      "center_x": 0.2,
-      "center_y": 0.85
+      "center_x": 0.24,
+      "center_y": 0.81
     },
     {
-      "name": "right-hill",
-      "description": "Darker green rounded hill in the right foreground.",
-      "sam_prompt": "hill",
+      "name": "foreground-hill",
+      "description": "Darker green rounded hill occupying the right and lower foreground.",
+      "sam_prompt": "grassy hill",
       "kind": "surface",
-      "center_x": 0.75,
-      "center_y": 0.85
+      "center_x": 0.69,
+      "center_y": 0.835
     },
     {
-      "name": "sun-body",
-      "description": "Bright yellow solid circle in the upper right sky.",
+      "name": "sun-disc",
+      "description": "Solid yellow circle representing the sun in the sky.",
       "sam_prompt": "sun",
       "kind": "object",
-      "center_x": 0.78,
-      "center_y": 0.23
+      "center_x": 0.795,
+      "center_y": 0.235
     },
     {
       "name": "house-body",
-      "description": "Beige square base forming the house walls.",
+      "description": "Beige rectangular house body with flat bottom.",
       "sam_prompt": "house",
       "kind": "object",
-      "center_x": 0.23,
-      "center_y": 0.76
+      "center_x": 0.234,
+      "center_y": 0.759
     },
     {
       "name": "house-roof",
-      "description": "Red triangular shape capping the house as a roof.",
-      "sam_prompt": "roof",
+      "description": "Red triangular roof sitting on top of the house body.",
+      "sam_prompt": "house roof",
       "kind": "object",
-      "center_x": 0.23,
-      "center_y": 0.58
+      "center_x": 0.234,
+      "center_y": 0.584
     },
     {
       "name": "tree-trunk",
-      "description": "Dark brown narrow vertical rectangle forming the tree trunk.",
+      "description": "Narrow dark brown vertical rectangle forming a tree trunk.",
       "sam_prompt": "tree trunk",
       "kind": "object",
-      "center_x": 0.74,
-      "center_y": 0.73
+      "center_x": 0.769,
+      "center_y": 0.762
     },
     {
       "name": "tree-canopy",
-      "description": "Dark green solid circle forming the tree foliage.",
-      "sam_prompt": "tree",
+      "description": "Dark green solid circle forming a tree canopy.",
+      "sam_prompt": "tree canopy",
       "kind": "object",
-      "center_x": 0.74,
-      "center_y": 0.59
+      "center_x": 0.769,
+      "center_y": 0.588
     },
     {
       "name": "house-door",
-      "description": "Dark brown small vertical rectangle for the house door.",
+      "description": "Small dark brown rounded-top rectangle as the house door.",
       "sam_prompt": "door",
       "kind": "object",
-      "center_x": 0.24,
-      "center_y": 0.8
+      "center_x": 0.237,
+      "center_y": 0.802
     }
   ]
 }

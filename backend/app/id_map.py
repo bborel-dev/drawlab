@@ -5,6 +5,7 @@ import numpy as np
 import resvg_py
 from PIL import Image
 
+from app.nearest_fill import fill_from_nearest
 from app.tracing import svg_document
 
 FILL_PATTERN = re.compile(r'fill="#[0-9A-Fa-f]{6}"')
@@ -17,6 +18,21 @@ def render_id_map(paths: list[str], size: tuple[int, int]) -> np.ndarray:
     )
     pixels = np.asarray(Image.open(io.BytesIO(png)).convert("RGB"), dtype=np.int64)
     return (pixels[..., 0] << 16) | (pixels[..., 1] << 8) | pixels[..., 2]
+
+
+def covering_id_map(paths: list[str], size: tuple[int, int]) -> np.ndarray:
+    ids = render_id_map(paths, size)
+    return fill_from_nearest(ids[..., None], ids > 0)[..., 0]
+
+
+def path_fill_colors(paths: list[str]) -> np.ndarray:
+    colors = np.zeros((len(paths) + 1, 3))
+    for index, path in enumerate(paths):
+        match = FILL_PATTERN.search(path)
+        if match:
+            hex_color = match.group(0)[7:13]
+            colors[index + 1] = [int(hex_color[offset : offset + 2], 16) for offset in (0, 2, 4)]
+    return colors
 
 
 def path_centroids(ids: np.ndarray, path_count: int) -> np.ndarray:
