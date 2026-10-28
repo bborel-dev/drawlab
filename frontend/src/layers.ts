@@ -1,5 +1,11 @@
 import type { Canvas } from './api'
 
+export type Drawing = {
+  canvas: Canvas
+  layers: string[]
+  sourceName: string
+}
+
 const LAYER_NAME_PATTERN = /^<g id="([^"]+)"/
 
 export function layerName(markup: string): string {

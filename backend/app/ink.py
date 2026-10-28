@@ -15,6 +15,7 @@ INK_CORE_SHARE = 0.5
 DARKNESS_WEIGHT_POWER = 4
 ERASE_MARGIN = 5
 INK_OVERLAP = 9
+INK_SUPPORT = 0.18
 LUMA_WEIGHTS = np.array([0.299, 0.587, 0.114])
 UNOWNED = -1
 
@@ -43,15 +44,32 @@ def erase_ink(image: Image.Image, ink: np.ndarray) -> Image.Image:
 
 
 def front_ink_owners(ink: np.ndarray, pixel_owner: np.ndarray, width: int) -> np.ndarray:
-    shifted = (pixel_owner + 1).astype(np.uint16)
-    front = cv2.dilate(shifted, kernel(width, BACKGROUND_KERNEL_RATIO)).astype(np.int64) - 1
-    return np.where(ink, front, UNOWNED)
+    reach = kernel(width, BACKGROUND_KERNEL_RATIO).shape
+    paint = ~ink
+    neighbors = np.maximum(neighbor_counts(paint, reach), 1)
+    owners = np.full(ink.shape, UNOWNED, dtype=np.int64)
+    for index in np.unique(pixel_owner):
+        support = neighbor_counts(paint & (pixel_owner == index), reach) / neighbors
+        owners[ink & (support >= INK_SUPPORT)] = index
+    return nearest_owner_for_unsupported(ink, owners)
+
+
+def neighbor_counts(mask: np.ndarray, reach: tuple[int, int]) -> np.ndarray:
+    return cv2.boxFilter(mask.astype(np.float32), -1, reach, normalize=False)
+
+
+def nearest_owner_for_unsupported(ink: np.ndarray, owners: np.ndarray) -> np.ndarray:
+    supported = owners != UNOWNED
+    if not (ink & ~supported).any() or not supported.any():
+        return owners
+    nearest = fill_from_nearest(owners[..., None], supported)[..., 0]
+    return np.where(ink, nearest, UNOWNED)
 
 
 def overlapping_ink_region(ink: np.ndarray, ink_owner: np.ndarray, index: int) -> np.ndarray:
     overlap = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (INK_OVERLAP, INK_OVERLAP))
     own = cv2.dilate((ink_owner == index).astype(np.uint8), overlap)
-    return ink & (own > 0)
+    return ink & (own > 0) & (ink_owner >= index)
 
 
 def ink_path_colors(paths: list[str], pixels: np.ndarray, region: np.ndarray) -> list[str]:

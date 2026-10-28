@@ -16,6 +16,8 @@ from app.tracing import (
     trace_binary_paths,
     trace_paths,
 )
+from app.underpaint import trace_underpaint, underpaint_regions
+from app.unknown_objects import color_name, find_unknown_objects, surface_tone_map
 
 BACKGROUND_LAYER = "background"
 SURFACE_COLOR_TIE = 30
@@ -43,13 +45,17 @@ def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) ->
     names = layer_names(direction)
     owners = paint_object_owners(cuts, names, color_image.size)
     path_owner = assign_paths(ids, owners, len(paths), len(names))
+    unowned = path_owner == UNOWNED
     fill_unowned_paths(path_owner, paths, ids, direction, names)
+    names = adopt_unknown_objects(path_owner, unowned, paths, ids, direction, cuts, names)
     pixel_owner = path_owner[ids]
     ink_owner = front_ink_owners(ink, pixel_owner, color_image.width)
     color_paths = group_color_paths(paths, path_owner, len(names))
     gaps, rendered = find_gaps([path for layer_paths in color_paths for path in layer_paths], color_image.size)
+    underpaints = trace_underpaints(rendered, pixel_owner, path_owner, paths, ids, surface_indexes(direction, names))
     for index, name in enumerate(names):
-        color = color_part(color_paths[index], trace_gap_patch(rendered, gaps & (pixel_owner == index)))
+        gap_patch = trace_gap_patch(rendered, gaps & (pixel_owner == index))
+        color = color_part(color_paths[index], gap_patch, underpaints.get(index))
         line = trace_ink_part(trace_image, overlapping_ink_region(ink, ink_owner, index))
         layer = assemble_layer(name, color, line)
         if layer:
@@ -100,6 +106,72 @@ def fill_unowned_paths(
         path_owner[path_index] = closest_color_surface(colors[path_index], centroids[path_index], surfaces, dominant)
 
 
+def adopt_unknown_objects(
+    path_owner: np.ndarray,
+    unowned: np.ndarray,
+    paths: list[str],
+    ids: np.ndarray,
+    direction: ArtDirection,
+    cuts: list[Cut],
+    names: list[str],
+) -> list[str]:
+    surfaces = surface_indexes(direction, names)
+    missed = missed_object_center_paths(direction, cuts, names, ids)
+    adopted = list(names)
+    for unknown in find_unknown_objects(path_owner, unowned, path_fill_colors(paths), ids, surfaces):
+        owner = next((index for index, center_path in missed.items() if center_path in unknown.paths), None)
+        if owner is None:
+            adopted.append(unique_name(f"{color_name(unknown.color)}-shape", adopted))
+            owner = len(adopted) - 1
+        else:
+            del missed[owner]
+        path_owner[unknown.paths] = owner
+    return adopted
+
+
+def missed_object_center_paths(
+    direction: ArtDirection, cuts: list[Cut], names: list[str], ids: np.ndarray
+) -> dict[int, int]:
+    cut_names = {cut.element_name for cut in cuts if cut.mask}
+    height, width = ids.shape
+    return {
+        names.index(element.name): int(
+            ids[min(int(element.center[1] * height), height - 1), min(int(element.center[0] * width), width - 1)]
+        )
+        for element in direction.elements
+        if element.kind == "object" and element.name not in cut_names
+    }
+
+
+def trace_underpaints(
+    rendered: np.ndarray,
+    pixel_owner: np.ndarray,
+    path_owner: np.ndarray,
+    paths: list[str],
+    ids: np.ndarray,
+    surfaces: list[int],
+) -> dict[int, str | None]:
+    areas = np.bincount(ids.ravel(), minlength=len(paths) + 1)
+    tones = surface_tone_map(path_owner, path_fill_colors(paths), areas, surfaces)
+    return {
+        surface: trace_underpaint(rendered, pixel_owner, surface, region, tones.get(surface))
+        for surface, region in underpaint_regions(pixel_owner, surfaces).items()
+    }
+
+
+def surface_indexes(direction: ArtDirection, names: list[str]) -> list[int]:
+    surfaces = [names.index(element.name) for element in direction.elements if element.kind == "surface"]
+    return surfaces or [names.index(BACKGROUND_LAYER)]
+
+
+def unique_name(base: str, taken: list[str]) -> str:
+    name, count = base, 1
+    while name in taken:
+        count += 1
+        name = f"{base}-{count}"
+    return name
+
+
 def surface_centers(
     direction: ArtDirection, names: list[str], size: tuple[int, int]
 ) -> list[tuple[int, tuple[float, float]]]:
@@ -146,8 +218,8 @@ def group_color_paths(paths: list[str], path_owner: np.ndarray, layer_count: int
     return grouped
 
 
-def color_part(paths: list[str], gap_patch: str | None) -> LayerPart | None:
-    patched = [*paths, gap_patch] if gap_patch else paths
+def color_part(paths: list[str], gap_patch: str | None, underpaint: str | None) -> LayerPart | None:
+    patched = [part for part in (underpaint, *paths, gap_patch) if part]
     return LayerPart(paths=patched, offset=(0, 0)) if patched else None
 
 

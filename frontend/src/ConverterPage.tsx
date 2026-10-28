@@ -7,7 +7,7 @@ import { drawingProgress } from './drawingProgress'
 import DrawingStatus from './DrawingStatus'
 import DropZone from './DropZone'
 import Examples from './Examples'
-import { downloadSvg, svgDocument, svgFileName } from './layers'
+import { downloadSvg, svgDocument, svgFileName, type Drawing } from './layers'
 import ViewSwitch, { type CompareView } from './ViewSwitch'
 
 type Phase = 'empty' | 'drawing' | 'done'
@@ -20,7 +20,11 @@ type Source = {
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
-function ConverterPage() {
+type ConverterPageProps = {
+  onEdit: (drawing: Drawing) => void
+}
+
+function ConverterPage({ onEdit }: ConverterPageProps) {
   const [phase, setPhase] = useState<Phase>('empty')
   const [source, setSource] = useState<Source | null>(null)
   const [canvas, setCanvas] = useState<Canvas | null>(null)
@@ -205,7 +209,12 @@ function ConverterPage() {
             >
               Download SVG
             </button>
-            <button type="button" className="button button-primary" disabled title="Coming next">
+            <button
+              type="button"
+              className="button button-primary"
+              disabled={!canvas}
+              onClick={() => canvas && onEdit({ canvas, layers, sourceName: source.name })}
+            >
               Edit layers →
             </button>
           </div>

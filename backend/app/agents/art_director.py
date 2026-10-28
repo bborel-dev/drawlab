@@ -22,7 +22,9 @@ For each element give:
   "surface" for backgrounds and large areas (sky, wall, ground, floor, pavement).
 - center_x and center_y: the approximate center of the element as fractions of the image width and height,
   from 0 (left or top) to 1 (right or bottom).
-List the elements in drawing order: surfaces first, then large objects, then small details.
+List the elements from back to front, in the order a painter would paint them: surfaces first, then objects,
+each object after every element it covers. A person sitting on a chair comes after the chair,
+and a cup on a table comes after the table.
 Use between 5 and 25 elements and prefer whole objects over tiny parts.
 Also give the overall style and the main palette as hex colors."""
 
@@ -76,7 +78,8 @@ def ask_art_director(client: ModelClient, image: Image.Image) -> ArtDirection:
 
 
 def parse_art_direction(raw: dict[str, Any]) -> ArtDirection:
-    elements = [parse_element(item) for item in raw["elements"][:MAX_ELEMENTS]]
+    parsed = [parse_element(item) for item in raw["elements"][:MAX_ELEMENTS]]
+    elements = sorted(parsed, key=lambda element: element.kind != "surface")
     return ArtDirection(style=raw["style"], palette=list(raw["palette"]), elements=with_unique_names(elements))
 
 
