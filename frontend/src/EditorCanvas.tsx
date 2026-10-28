@@ -1,14 +1,18 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
 import type { Canvas } from './api'
 import { layerTransform, type EditorLayer } from './editorLayers'
+import { panBy, zoomAround, type View } from './zoom'
+
+type ViewChange = (change: (view: View) => View) => void
 
 type EditorCanvasProps = {
   canvas: Canvas
   layers: EditorLayer[]
   selectedId: string | null
-  zoom: number
+  view: View
   onSelect: (id: string | null) => void
   onMove: (id: string, x: number, y: number) => void
+  onViewChange: ViewChange
 }
 
 type Drag = {
@@ -28,15 +32,18 @@ const NUDGES: Record<string, [number, number]> = {
   ArrowUp: [0, -1],
   ArrowDown: [0, 1],
 }
+const WHEEL_ZOOM_SPEED = 0.01
+const WHEEL_LINE_PIXELS = 16
 
-function EditorCanvas({ canvas, layers, selectedId, zoom, onSelect, onMove }: EditorCanvasProps) {
+function EditorCanvas({ canvas, layers, selectedId, view, onSelect, onMove, onViewChange }: EditorCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<Drag | null>(null)
   const fitScale = useFitScale(stageRef, canvas)
   const selected = layers.find((layer) => layer.id === selectedId) ?? null
   const box = useLayerBox(svgRef, selected)
-  const scale = fitScale * zoom
+  const scale = fitScale * view.zoom
+  useTrackpadView(stageRef, onViewChange)
 
   function startDrag(event: PointerEvent<SVGSVGElement>) {
     const layer = layers.find((candidate) => candidate.id === layerIdAt(event.target))
@@ -75,7 +82,7 @@ function EditorCanvas({ canvas, layers, selectedId, zoom, onSelect, onMove }: Ed
       ref={stageRef}
       className="editor-stage"
       tabIndex={0}
-      aria-label="Canvas. Drag a layer to move it, or use the arrow keys."
+      aria-label="Canvas. Drag a layer to move it, use the arrow keys to nudge it, pinch to zoom, scroll to pan."
       onKeyDown={nudge}
       onPointerDown={(event) => event.target === event.currentTarget && onSelect(null)}
     >
@@ -85,6 +92,7 @@ function EditorCanvas({ canvas, layers, selectedId, zoom, onSelect, onMove }: Ed
         xmlns="http://www.w3.org/2000/svg"
         width={canvas.width * scale}
         height={canvas.height * scale}
+        style={{ transform: `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px))` }}
         viewBox={`0 0 ${canvas.width} ${canvas.height}`}
         onPointerDown={startDrag}
         onPointerMove={drag}
@@ -141,6 +149,28 @@ function useFitScale(stageRef: RefObject<HTMLDivElement | null>, canvas: Canvas)
     return () => observer.disconnect()
   }, [stageRef, canvas])
   return fitScale
+}
+
+
+function useTrackpadView(stageRef: RefObject<HTMLDivElement | null>, onViewChange: ViewChange): void {
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!stage) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? WHEEL_LINE_PIXELS : 1
+      if (!event.ctrlKey) {
+        onViewChange((view) => panBy(view, { x: -event.deltaX * unit, y: -event.deltaY * unit }))
+        return
+      }
+      const rect = stage.getBoundingClientRect()
+      const point = { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 }
+      const factor = Math.exp(-event.deltaY * unit * WHEEL_ZOOM_SPEED)
+      onViewChange((view) => zoomAround(view, view.zoom * factor, point))
+    }
+    stage.addEventListener('wheel', onWheel, { passive: false })
+    return () => stage.removeEventListener('wheel', onWheel)
+  }, [stageRef, onViewChange])
 }
 
 function useLayerBox(svgRef: RefObject<SVGSVGElement | null>, layer: EditorLayer | null): DOMRect | null {

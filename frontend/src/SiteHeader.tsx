@@ -1,24 +1,22 @@
+import logo from './assets/logo.svg?raw'
+
 export type Page = 'convert' | 'editor'
 
 type SiteHeaderProps = {
   page: Page
-  editorReady: boolean
   onNavigate: (page: Page) => void
 }
 
-function SiteHeader({ page, editorReady, onNavigate }: SiteHeaderProps) {
+function SiteHeader({ page, onNavigate }: SiteHeaderProps) {
   return (
     <header className="site-header glass">
-      <span className="brand">Drawlab</span>
+      <span className="brand">
+        <span className="brand-logo" dangerouslySetInnerHTML={{ __html: logo }} />
+        Drawlab
+      </span>
       <nav className="site-nav" aria-label="Pages">
         <NavItem label="Convert" active={page === 'convert'} onClick={() => onNavigate('convert')} />
-        <NavItem
-          label="Editor"
-          active={page === 'editor'}
-          disabled={!editorReady}
-          title={editorReady ? undefined : 'Convert an image first'}
-          onClick={() => onNavigate('editor')}
-        />
+        <NavItem label="Editor" active={page === 'editor'} onClick={() => onNavigate('editor')} />
       </nav>
     </header>
   )

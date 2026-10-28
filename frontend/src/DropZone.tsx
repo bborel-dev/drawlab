@@ -2,11 +2,21 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 
 type DropZoneProps = {
   onFile: (file: File) => void
+  title?: string
+  hint?: string
+  accept?: string
+  label?: string
 }
 
-const ACCEPTED_TYPES = 'image/png,image/jpeg,image/webp'
+const IMAGE_TYPES = 'image/png,image/jpeg,image/webp'
 
-function DropZone({ onFile }: DropZoneProps) {
+function DropZone({
+  onFile,
+  title = 'Drop an image here',
+  hint = 'PNG, JPG or WebP, up to 10 MB',
+  accept = IMAGE_TYPES,
+  label = 'Upload an image',
+}: DropZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isOver, setIsOver] = useState(false)
 
@@ -26,7 +36,7 @@ function DropZone({ onFile }: DropZoneProps) {
   return (
     <section
       className={`drop-zone${isOver ? ' is-over' : ''}`}
-      aria-label="Upload an image"
+      aria-label={label}
       onDragOver={(event) => {
         event.preventDefault()
         setIsOver(true)
@@ -46,12 +56,12 @@ function DropZone({ onFile }: DropZoneProps) {
           />
         </svg>
       </span>
-      <p className="drop-title">Drop an image here</p>
+      <p className="drop-title">{title}</p>
       <button type="button" className="button button-primary" onClick={() => inputRef.current?.click()}>
         Choose a file
       </button>
-      <input ref={inputRef} type="file" accept={ACCEPTED_TYPES} hidden onChange={handleChange} />
-      <p className="drop-hint">PNG, JPG or WebP, up to 10 MB</p>
+      <input ref={inputRef} type="file" accept={accept} hidden onChange={handleChange} />
+      <p className="drop-hint">{hint}</p>
     </section>
   )
 }

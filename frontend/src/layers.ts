@@ -4,6 +4,7 @@ export type Drawing = {
   canvas: Canvas
   layers: string[]
   sourceName: string
+  foreign?: boolean
 }
 
 const LAYER_NAME_PATTERN = /^<g id="([^"]+)"/

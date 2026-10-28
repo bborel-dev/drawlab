@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { applyAgentEvent, initialAgentStates } from './agents'
 import { streamDrawing, type Canvas } from './api'
 import CompareFrame from './CompareFrame'
@@ -7,6 +7,7 @@ import { drawingProgress } from './drawingProgress'
 import DrawingStatus from './DrawingStatus'
 import DropZone from './DropZone'
 import Examples from './Examples'
+import HowItWorks from './HowItWorks'
 import { downloadSvg, svgDocument, svgFileName, type Drawing } from './layers'
 import ViewSwitch, { type CompareView } from './ViewSwitch'
 
@@ -21,10 +22,11 @@ type Source = {
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 type ConverterPageProps = {
+  onDrawn: (drawing: Drawing) => void
   onEdit: (drawing: Drawing) => void
 }
 
-function ConverterPage({ onEdit }: ConverterPageProps) {
+function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
   const [phase, setPhase] = useState<Phase>('empty')
   const [source, setSource] = useState<Source | null>(null)
   const [canvas, setCanvas] = useState<Canvas | null>(null)
@@ -50,6 +52,16 @@ function ConverterPage({ onEdit }: ConverterPageProps) {
     }, Math.max(0, drawingEndsAt - performance.now()))
     return () => window.clearTimeout(timer)
   }, [phase, streamDone, drawingEndsAt])
+
+  const sourceName = source?.name
+  const drawing = useMemo<Drawing | null>(
+    () => (streamDone && canvas && sourceName ? { canvas, layers, sourceName } : null),
+    [streamDone, canvas, layers, sourceName],
+  )
+
+  useEffect(() => {
+    if (phase === 'done' && drawing) onDrawn(drawing)
+  }, [phase, drawing, onDrawn])
 
   const handleLayerStart = useCallback((name: string) => {
     setCurrentLayer(name)
@@ -127,21 +139,24 @@ function ConverterPage({ onEdit }: ConverterPageProps) {
 
   if (phase === 'empty' || !source) {
     return (
-      <main className="converter converter-empty glass">
-        <h1>
-          Turn any image into
-          <br />
-          editable vectors.
-        </h1>
-        <p className="lede">AI agents redraw your image stroke by stroke, as clean SVG layers with real names.</p>
-        {error && (
-          <p className="error-banner" role="alert">
-            {error}
-          </p>
-        )}
-        <DropZone onFile={startDrawing} />
-        <Examples onFile={startDrawing} />
-      </main>
+      <div className="converter-home">
+        <main className="converter converter-empty glass">
+          <h1>
+            Turn any image into
+            <br />
+            editable vectors.
+          </h1>
+          <p className="lede">AI agents redraw your image stroke by stroke, as clean SVG layers with real names.</p>
+          {error && (
+            <p className="error-banner" role="alert">
+              {error}
+            </p>
+          )}
+          <DropZone onFile={startDrawing} />
+          <Examples onFile={startDrawing} />
+        </main>
+        <HowItWorks />
+      </div>
     )
   }
 
@@ -212,8 +227,8 @@ function ConverterPage({ onEdit }: ConverterPageProps) {
             <button
               type="button"
               className="button button-primary"
-              disabled={!canvas}
-              onClick={() => canvas && onEdit({ canvas, layers, sourceName: source.name })}
+              disabled={!drawing}
+              onClick={() => drawing && onEdit(drawing)}
             >
               Edit layers →
             </button>

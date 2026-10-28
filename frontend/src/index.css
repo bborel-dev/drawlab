@@ -11,6 +11,8 @@
   --glass-fill-strong: rgb(255 255 255 / 75%);
   --glass-edge: rgb(255 255 255 / 75%);
   --glass-blur: blur(36px) saturate(1.5);
+  --rainbow: linear-gradient(90deg, #3b82f6, #a855f7, #ec4899, #fb923c, #22d3ee, #3b82f6);
+  --rainbow-soft: linear-gradient(90deg, #a5c8fb, #d6b8fb, #f6b3d6, #fcc9a0, #a8e9f5, #a5c8fb);
   --glass-shadow: 0 30px 80px -30px rgb(40 30 90 / 35%), inset 0 1px 0 rgb(255 255 255 / 90%);
   --color-accent: #1c1e21;
   --color-accent-hover: #3a3b3f;

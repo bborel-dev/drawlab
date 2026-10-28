@@ -1,21 +1,23 @@
-const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
-const FIT_ZOOM = 1
+import { FIT_VIEW, ZOOM_LEVELS, type View } from './zoom'
 
 type ZoomControlProps = {
-  zoom: number
-  onChange: (zoom: number) => void
+  view: View
+  onZoom: (zoom: number) => void
+  onFit: () => void
 }
 
-function ZoomControl({ zoom, onChange }: ZoomControlProps) {
+function ZoomControl({ view, onZoom, onFit }: ZoomControlProps) {
+  const { zoom } = view
   const zoomOut = ZOOM_LEVELS.findLast((level) => level < zoom)
   const zoomIn = ZOOM_LEVELS.find((level) => level > zoom)
+  const fitted = zoom === FIT_VIEW.zoom && view.x === FIT_VIEW.x && view.y === FIT_VIEW.y
 
   return (
     <div className="view-switch zoom-control" role="group" aria-label="Zoom">
       <button
         type="button"
         disabled={zoomOut === undefined}
-        onClick={() => zoomOut && onChange(zoomOut)}
+        onClick={() => zoomOut && onZoom(zoomOut)}
         aria-label="Zoom out"
       >
         −
@@ -26,12 +28,12 @@ function ZoomControl({ zoom, onChange }: ZoomControlProps) {
       <button
         type="button"
         disabled={zoomIn === undefined}
-        onClick={() => zoomIn && onChange(zoomIn)}
+        onClick={() => zoomIn && onZoom(zoomIn)}
         aria-label="Zoom in"
       >
         +
       </button>
-      <button type="button" aria-pressed={zoom === FIT_ZOOM} onClick={() => onChange(FIT_ZOOM)}>
+      <button type="button" aria-pressed={fitted} onClick={onFit}>
         Fit
       </button>
     </div>

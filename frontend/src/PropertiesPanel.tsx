@@ -5,7 +5,7 @@ type PropertiesPanelProps = {
   canvas: Canvas
   layers: EditorLayer[]
   layer: EditorLayer | null
-  onChange: (id: string, patch: LayerPatch) => void
+  onChange: (id: string, patch: LayerPatch, gesture?: string) => void
   onReorder: (id: string, index: number) => void
 }
 
@@ -39,8 +39,8 @@ function PropertiesPanel({ canvas, layers, layer, onChange, onReorder }: Propert
       <section className="prop-section">
         <h3>Position</h3>
         <div className="field-row">
-          <NumberField label="X" value={layer.x} onChange={(x) => onChange(layer.id, { x })} />
-          <NumberField label="Y" value={layer.y} onChange={(y) => onChange(layer.id, { y })} />
+          <NumberField label="X" value={layer.x} onChange={(x) => onChange(layer.id, { x }, 'x')} />
+          <NumberField label="Y" value={layer.y} onChange={(y) => onChange(layer.id, { y }, 'y')} />
         </div>
         <button
           type="button"
@@ -60,7 +60,7 @@ function PropertiesPanel({ canvas, layers, layer, onChange, onReorder }: Propert
             min={0}
             max={100}
             value={Math.round(layer.opacity * 100)}
-            onChange={(event) => onChange(layer.id, { opacity: Number(event.target.value) / 100 })}
+            onChange={(event) => onChange(layer.id, { opacity: Number(event.target.value) / 100 }, 'opacity')}
             aria-label="Opacity"
           />
           <span>{Math.round(layer.opacity * 100)}%</span>
