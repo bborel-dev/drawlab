@@ -11,6 +11,10 @@
   filter: blur(60px);
 }
 
+.backdrop .blob {
+  animation-delay: var(--backdrop-delay, 0ms);
+}
+
 .blob-blue {
   left: -12vw;
   top: -22vh;
@@ -140,23 +144,48 @@
 }
 
 .brand {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 7px;
+  height: 24px;
+  color: transparent;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
-.brand-logo {
-  display: block;
-  height: 24px;
+.brand-clip {
+  position: absolute;
 }
 
-.brand-logo svg {
+.brand-hole {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.brand-hole-view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: var(--color-page);
+  filter: saturate(1.15) brightness(0.88);
+}
+
+.brand-hole .backdrop {
+  position: absolute;
+  z-index: auto;
+}
+
+.brand-logo {
   display: block;
-  width: auto;
-  height: 100%;
+  flex: none;
+  height: 24px;
 }
 
 .site-nav {

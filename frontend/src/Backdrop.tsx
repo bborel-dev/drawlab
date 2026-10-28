@@ -1,6 +1,9 @@
+import { useState, type CSSProperties } from 'react'
+
 function Backdrop() {
+  const [clock] = useState(() => ({ '--backdrop-delay': `${-performance.now()}ms` }) as CSSProperties)
   return (
-    <div className="backdrop" aria-hidden="true">
+    <div className="backdrop" style={clock} aria-hidden="true">
       <span className="blob blob-blue" />
       <span className="blob blob-pink" />
       <span className="blob blob-violet" />

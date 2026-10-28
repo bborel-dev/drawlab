@@ -1,4 +1,4 @@
-import logo from './assets/logo.svg?raw'
+import BrandMark from './BrandMark'
 
 export type Page = 'convert' | 'editor'
 
@@ -10,10 +10,7 @@ type SiteHeaderProps = {
 function SiteHeader({ page, onNavigate }: SiteHeaderProps) {
   return (
     <header className="site-header glass">
-      <span className="brand">
-        <span className="brand-logo" dangerouslySetInnerHTML={{ __html: logo }} />
-        Drawlab
-      </span>
+      <BrandMark />
       <nav className="site-nav" aria-label="Pages">
         <NavItem label="Convert" active={page === 'convert'} onClick={() => onNavigate('convert')} />
         <NavItem label="Editor" active={page === 'editor'} onClick={() => onNavigate('editor')} />
