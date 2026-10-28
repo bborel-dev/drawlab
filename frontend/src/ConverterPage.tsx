@@ -6,8 +6,6 @@ import DrawingCanvas from './DrawingCanvas'
 import { drawingProgress } from './drawingProgress'
 import DrawingStatus from './DrawingStatus'
 import DropZone from './DropZone'
-import Examples from './Examples'
-import HowItWorks from './HowItWorks'
 import { downloadSvg, svgDocument, svgFileName, type Drawing } from './layers'
 import ViewSwitch, { type CompareView } from './ViewSwitch'
 
@@ -139,24 +137,20 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
 
   if (phase === 'empty' || !source) {
     return (
-      <div className="converter-home">
-        <main className="converter converter-empty glass">
-          <h1>
-            Turn any image into
-            <br />
-            editable vectors.
-          </h1>
-          <p className="lede">AI agents redraw your image stroke by stroke, as clean SVG layers with real names.</p>
-          {error && (
-            <p className="error-banner" role="alert">
-              {error}
-            </p>
-          )}
-          <DropZone onFile={startDrawing} />
-          <Examples onFile={startDrawing} />
-        </main>
-        <HowItWorks />
-      </div>
+      <main className="converter converter-empty glass">
+        <h1>
+          Turn any image into
+          <br />
+          editable vectors.
+        </h1>
+        <p className="lede">AI agents redraw your image stroke by stroke, as clean SVG layers with real names.</p>
+        {error && (
+          <p className="error-banner" role="alert">
+            {error}
+          </p>
+        )}
+        <DropZone onFile={startDrawing} />
+      </main>
     )
   }
 
