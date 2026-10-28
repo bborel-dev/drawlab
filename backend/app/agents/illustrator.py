@@ -7,8 +7,17 @@ from PIL import Image
 from app.agents.art_director import ArtDirection
 from app.agents.cutter import Cut
 from app.id_map import covering_id_map, path_centroids, path_fill_colors
-from app.ink import UNOWNED, erase_ink, find_ink, front_ink_owners, ink_path_colors, overlapping_ink_region
+from app.ink import (
+    UNOWNED,
+    erase_ink,
+    find_ink,
+    front_ink_owners,
+    ink_path_colors,
+    ink_reach,
+    overlapping_ink_region,
+)
 from app.seams import find_gaps, seal_seams, trace_gap_patch
+from app.svg_compaction import compact_markup
 from app.tracing import (
     downscale_for_tracing,
     recolor_binary_path,
@@ -38,7 +47,8 @@ class LayerPart:
 
 def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) -> Iterator[Layer]:
     trace_image = downscale_for_tracing(image)
-    ink = find_ink(trace_image)
+    reach = ink_reach(trace_image)
+    ink = find_ink(trace_image, reach)
     color_image = erase_ink(trace_image, ink)
     paths = trace_paths(color_image, hierarchical="cutout")
     ids = covering_id_map(paths, color_image.size)
@@ -49,7 +59,7 @@ def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) ->
     fill_unowned_paths(path_owner, paths, ids, direction, names)
     names = adopt_unknown_objects(path_owner, unowned, paths, ids, direction, cuts, names)
     pixel_owner = path_owner[ids]
-    ink_owner = front_ink_owners(ink, pixel_owner, color_image.width)
+    ink_owner = front_ink_owners(ink, pixel_owner, reach)
     color_paths = group_color_paths(paths, path_owner, len(names))
     gaps, rendered = find_gaps([path for layer_paths in color_paths for path in layer_paths], color_image.size)
     underpaints = trace_underpaints(rendered, pixel_owner, path_owner, paths, ids, surface_indexes(direction, names))
@@ -241,8 +251,8 @@ def assemble_layer(name: str, color: LayerPart | None, line: LayerPart | None) -
     groups = [part_group(group_id, kind, part) for group_id, kind, part in parts if part]
     if not groups:
         return None
-    path_count = sum(len(part.paths) for _, _, part in parts if part)
-    return Layer(name=name, svg=f'<g id="{name}">{"".join(groups)}</g>', path_count=path_count)
+    svg = compact_markup(f'<g id="{name}">{"".join(groups)}</g>')
+    return Layer(name=name, svg=svg, path_count=svg.count("<path"))
 
 
 def part_group(group_id: str, kind: str, part: LayerPart) -> str:
