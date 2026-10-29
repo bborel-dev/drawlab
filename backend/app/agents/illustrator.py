@@ -94,7 +94,8 @@ def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) ->
         gap_patch = trace_gap_patch(rendered, gaps & (pixel_owner == index))
         color = color_part(color_paths[index], gap_patch, underpaints.get(index))
         smoothing = DETAILED if detailed[index] else SMOOTH
-        line = trace_ink_part(trace_image, ink, ink_clip_region(ink, ink_owner, index), smoothing)
+        clip = ink_clip_region(ink, ink_owner, index)
+        line = trace_ink_part(trace_image, color_image, ink, clip, smoothing)
         layer = assemble_layer(name, color, line)
         if layer:
             yield layer
@@ -281,24 +282,29 @@ def color_part(paths: list[str], gap_patch: str | None, underpaint: str | None) 
     return LayerPart(paths=patched, offset=(0, 0)) if patched else None
 
 
-def trace_ink_part(image: Image.Image, ink: np.ndarray, clip: np.ndarray, smoothing: Smoothing) -> LayerPart | None:
+def trace_ink_part(
+    image: Image.Image, fill: Image.Image, ink: np.ndarray, clip: np.ndarray, smoothing: Smoothing
+) -> LayerPart | None:
     box = Image.fromarray((ink & clip).astype(np.uint8) * 255).getbbox()
     if box is None:
         return None
     top, bottom, left, right = context_box((box[1], box[3], box[0], box[2]), ink.shape)
     ink_crop, clip_crop = ink[top:bottom, left:right], clip[top:bottom, left:right]
     pixels = np.asarray(image)[top:bottom, left:right]
+    fill_crop = np.asarray(fill)[top:bottom, left:right].astype(float)
     edges = box_image_edges((top, bottom, left, right), ink.shape)
     tones = split_ink_by_tone(pixels, ink_crop)
-    paths = [path for tone in tones for path in trace_tone_paths(pixels, tone, edges, clip_crop, smoothing)]
+    paths = [
+        path for tone in tones for path in trace_tone_paths(pixels, fill_crop, tone, edges, clip_crop, smoothing)
+    ]
     return LayerPart(paths=paths, offset=(left, top)) if paths else None
 
 
 def trace_tone_paths(
-    pixels: np.ndarray, tone: np.ndarray, edges: Edges, clip: np.ndarray, smoothing: Smoothing
+    pixels: np.ndarray, fill: np.ndarray, tone: np.ndarray, edges: Edges, clip: np.ndarray, smoothing: Smoothing
 ) -> list[str]:
     paths = ink_outline_paths(tone, edges, clip, smoothing)
-    colors = ink_path_colors(paths, pixels, tone) if paths else []
+    colors = ink_path_colors(paths, pixels, fill, tone) if paths else []
     return [recolor_binary_path(path, color) for path, color in zip(paths, colors)]
 
 

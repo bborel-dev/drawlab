@@ -18,7 +18,10 @@ FILL_EDGE_DELTA_E = 15.0
 FILL_EDGE_SHARE = 0.3
 FILL_CONTACT_DELTA_E = 8.0
 FILL_CONTACT_SHARE = 0.1
-DARKNESS_WEIGHT_POWER = 4
+CONTRAST_WEIGHT_POWER = 4
+LIGHT_LINE_KERNEL = 5
+LIGHT_LINE_MIN_CONTRAST = 25
+LIGHT_LINE_MIN_LENGTH = 12
 ERASE_MARGIN = 5
 INK_OVERLAP = 9
 INK_SUPPORT = 0.18
@@ -74,10 +77,24 @@ def find_ink(image: Image.Image, reach: int) -> np.ndarray:
     core_contrast = np.where(candidate, contrast, 0).astype(np.uint8)
     peak = cv2.dilate(core_contrast, kernel(image.width, CORE_KERNEL_RATIO))
     ink = candidate & (contrast >= peak * INK_CORE_SHARE)
-    if not ink.any():
-        return ink
     lab = cv2.cvtColor(np.asarray(image).astype(np.float32) / 255, cv2.COLOR_RGB2LAB)
-    return drop_fill_spurs(drop_fill_edges(ink, lab, reach), lab, reach)
+    light = find_light_lines(luma, lab)
+    if not ink.any():
+        return light
+    return drop_fill_spurs(drop_fill_edges(ink, lab, reach), lab, reach) | light
+
+
+def find_light_lines(luma: np.ndarray, lab: np.ndarray) -> np.ndarray:
+    opened = cv2.morphologyEx(luma, cv2.MORPH_OPEN, ellipse(LIGHT_LINE_KERNEL))
+    contrast = luma.astype(np.int16) - opened
+    candidate = contrast > LIGHT_LINE_MIN_CONTRAST
+    peak = cv2.dilate(np.where(candidate, contrast, 0).astype(np.uint8), ellipse(LIGHT_LINE_KERNEL))
+    lines = candidate & (contrast >= peak * INK_CORE_SHARE)
+    if not lines.any():
+        return lines
+    components, stats, share = fill_contact(lines, lab)
+    length = np.hypot(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT])
+    return lines & ((length >= LIGHT_LINE_MIN_LENGTH) & (share < FILL_CONTACT_SHARE))[components]
 
 
 def drop_fill_edges(ink: np.ndarray, lab: np.ndarray, reach: int) -> np.ndarray:
@@ -91,15 +108,19 @@ def drop_fill_edges(ink: np.ndarray, lab: np.ndarray, reach: int) -> np.ndarray:
 
 
 def drop_fill_spurs(ink: np.ndarray, lab: np.ndarray, reach: int) -> np.ndarray:
-    count, components, stats, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
-    ring = (cv2.dilate(ink.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & ~ink
-    nearest = fill_from_nearest(np.dstack([lab, components[..., None].astype(np.float32)]), ink)
+    components, stats, share = fill_contact(ink, lab)
+    spur = (share >= FILL_CONTACT_SHARE) & (stats[:, cv2.CC_STAT_AREA] <= reach**2)
+    return ink & ~spur[components]
+
+
+def fill_contact(lines: np.ndarray, lab: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    count, components, stats, _ = cv2.connectedComponentsWithStats(lines.astype(np.uint8), connectivity=8)
+    ring = (cv2.dilate(lines.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & ~lines
+    nearest = fill_from_nearest(np.dstack([lab, components[..., None].astype(np.float32)]), lines)
     similar = ring & (np.linalg.norm(lab - nearest[..., :3], axis=2) < FILL_CONTACT_DELTA_E)
     touched = nearest[..., 3].astype(np.int64)
     contact = np.bincount(touched[similar], minlength=count)
-    share = contact / np.maximum(np.bincount(touched[ring], minlength=count), 1)
-    spur = (share >= FILL_CONTACT_SHARE) & (stats[:, cv2.CC_STAT_AREA] <= reach**2)
-    return ink & ~spur[components]
+    return components, stats, contact / np.maximum(np.bincount(touched[ring], minlength=count), 1)
 
 
 def erase_ink(image: Image.Image, ink: np.ndarray) -> Image.Image:
@@ -165,11 +186,11 @@ def ink_clip_region(ink: np.ndarray, ink_owner: np.ndarray, index: int) -> np.nd
     return (own > 0) & ~(ink & (ink_owner < index))
 
 
-def ink_path_colors(paths: list[str], pixels: np.ndarray, region: np.ndarray) -> list[str]:
+def ink_path_colors(paths: list[str], pixels: np.ndarray, fill: np.ndarray, region: np.ndarray) -> list[str]:
     ids = render_id_map(paths, (region.shape[1], region.shape[0]))
     inside = region & (ids > 0)
     rgb = pixels[inside].astype(float)
-    weights = (255 - rgb @ LUMA_WEIGHTS) ** DARKNESS_WEIGHT_POWER
+    weights = np.abs((rgb - fill[inside]) @ LUMA_WEIGHTS) ** CONTRAST_WEIGHT_POWER
     path_ids = ids[inside]
     count = len(paths) + 1
     total = np.maximum(np.bincount(path_ids, weights, minlength=count), 1e-9)
