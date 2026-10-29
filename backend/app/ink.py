@@ -12,6 +12,12 @@ INK_MAX_LUMA = 110
 INK_MIN_CONTRAST = 20
 INK_RELATIVE_CONTRAST = 0.4
 INK_CORE_SHARE = 0.5
+FILL_RING_INNER = 3
+FILL_RING_OUTER = 7
+FILL_EDGE_DELTA_E = 15.0
+FILL_EDGE_SHARE = 0.3
+FILL_CONTACT_DELTA_E = 8.0
+FILL_CONTACT_SHARE = 0.1
 DARKNESS_WEIGHT_POWER = 4
 ERASE_MARGIN = 5
 INK_OVERLAP = 9
@@ -67,7 +73,33 @@ def find_ink(image: Image.Image, reach: int) -> np.ndarray:
     )
     core_contrast = np.where(candidate, contrast, 0).astype(np.uint8)
     peak = cv2.dilate(core_contrast, kernel(image.width, CORE_KERNEL_RATIO))
-    return candidate & (contrast >= peak * INK_CORE_SHARE)
+    ink = candidate & (contrast >= peak * INK_CORE_SHARE)
+    if not ink.any():
+        return ink
+    lab = cv2.cvtColor(np.asarray(image).astype(np.float32) / 255, cv2.COLOR_RGB2LAB)
+    return drop_fill_spurs(drop_fill_edges(ink, lab, reach), lab, reach)
+
+
+def drop_fill_edges(ink: np.ndarray, lab: np.ndarray, reach: int) -> np.ndarray:
+    ink_bytes = ink.astype(np.uint8)
+    ring = (cv2.dilate(ink_bytes, ellipse(FILL_RING_OUTER)) > 0) & ~(cv2.dilate(ink_bytes, ellipse(FILL_RING_INNER)) > 0)
+    nearest_ink = fill_from_nearest(lab, ink)
+    similar = ring & (np.linalg.norm(lab - nearest_ink, axis=2) < FILL_EDGE_DELTA_E)
+    box = (reach, reach)
+    share = neighbor_counts(similar, box) / np.maximum(neighbor_counts(ring, box), 1)
+    return ink & (share < FILL_EDGE_SHARE)
+
+
+def drop_fill_spurs(ink: np.ndarray, lab: np.ndarray, reach: int) -> np.ndarray:
+    count, components, stats, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    ring = (cv2.dilate(ink.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & ~ink
+    nearest = fill_from_nearest(np.dstack([lab, components[..., None].astype(np.float32)]), ink)
+    similar = ring & (np.linalg.norm(lab - nearest[..., :3], axis=2) < FILL_CONTACT_DELTA_E)
+    touched = nearest[..., 3].astype(np.int64)
+    contact = np.bincount(touched[similar], minlength=count)
+    share = contact / np.maximum(np.bincount(touched[ring], minlength=count), 1)
+    spur = (share >= FILL_CONTACT_SHARE) & (stats[:, cv2.CC_STAT_AREA] <= reach**2)
+    return ink & ~spur[components]
 
 
 def erase_ink(image: Image.Image, ink: np.ndarray) -> Image.Image:
@@ -93,7 +125,16 @@ def front_ink_owners(ink: np.ndarray, pixel_owner: np.ndarray, reach: int) -> np
     for index in np.unique(pixel_owner):
         support = neighbor_counts(paint & (pixel_owner == index), box) / neighbors
         owners[ink & (support >= INK_SUPPORT)] = index
-    return nearest_owner_for_unsupported(ink, owners)
+    return majority_ink_owners(ink, nearest_owner_for_unsupported(ink, owners), box)
+
+
+def majority_ink_owners(ink: np.ndarray, owners: np.ndarray, box: tuple[int, int]) -> np.ndarray:
+    indexes = np.unique(owners[ink])
+    if len(indexes) < 2:
+        return owners
+    votes = np.stack([neighbor_counts(owners == index, box) for index in indexes])
+    winners = indexes[len(indexes) - 1 - votes[::-1].argmax(axis=0)]
+    return np.where(ink, winners, UNOWNED)
 
 
 def neighbor_counts(mask: np.ndarray, reach: tuple[int, int]) -> np.ndarray:
@@ -108,10 +149,20 @@ def nearest_owner_for_unsupported(ink: np.ndarray, owners: np.ndarray) -> np.nda
     return np.where(ink, nearest, UNOWNED)
 
 
-def overlapping_ink_region(ink: np.ndarray, ink_owner: np.ndarray, index: int) -> np.ndarray:
+def keep_ink_on_top(ids: np.ndarray, path_owner: np.ndarray, ink: np.ndarray, ink_owner: np.ndarray) -> np.ndarray:
+    covered = ink & (path_owner[ids] > ink_owner)
+    tucked = ids.copy()
+    for owner in np.unique(ink_owner[covered]):
+        behind = fill_from_nearest(ids[..., None], path_owner[ids] <= owner)[..., 0]
+        target = covered & (ink_owner == owner)
+        tucked[target] = behind[target]
+    return tucked
+
+
+def ink_clip_region(ink: np.ndarray, ink_owner: np.ndarray, index: int) -> np.ndarray:
     overlap = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (INK_OVERLAP, INK_OVERLAP))
     own = cv2.dilate((ink_owner == index).astype(np.uint8), overlap)
-    return ink & (own > 0) & (ink_owner >= index)
+    return (own > 0) & ~(ink & (ink_owner < index))
 
 
 def ink_path_colors(paths: list[str], pixels: np.ndarray, region: np.ndarray) -> list[str]:

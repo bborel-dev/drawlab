@@ -13,6 +13,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageStat
 
 from app.agents.art_director import ArtDirection, ask_art_director, parse_art_direction
 from app.agents.cutter import Cut, cut_elements, mock_cut_elements
+from app.agents.mask_reviewer import check_masks
 from app.agents.illustrator import Layer, assemble_svg, draw_layers
 from app.tracing import downscale_for_tracing
 from app.budget import CallBudget
@@ -34,7 +35,11 @@ def run_agents(image: Image.Image) -> tuple[ArtDirection, list[Cut], CallBudget]
         return direction, list(mock_cut_elements(direction)), budget
     client = ModelClient(settings, budget)
     direction = ask_art_director(client, image)
-    return direction, list(cut_elements(client, image, direction)), budget
+    cuts = list(cut_elements(client, image, direction))
+    check = check_masks(client, image, direction, cuts)
+    for fix in check.fixes:
+        print(f"[reviewer] {fix.verdict} {fix.element_name} box={fix.box}")
+    return direction, check.cuts, budget
 
 
 def build_contact_sheet(model_image: Image.Image, cuts: list[Cut]) -> Image.Image:

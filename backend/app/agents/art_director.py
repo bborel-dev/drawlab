@@ -10,6 +10,7 @@ from app.model_client import ModelClient
 MAX_ELEMENTS = 25
 
 ElementKind = Literal["object", "surface"]
+OutlineKind = Literal["smooth", "detailed"]
 
 ART_DIRECTOR_PROMPT = """You are the art director of a vector drawing studio.
 Break this image into the visual elements an illustrator would draw as separate layers.
@@ -20,6 +21,13 @@ For each element give:
   A segmentation model reads it and ignores positions, so never use words like left, right, front, back, top or bottom.
 - kind: "object" for things with a clear outline (people, furniture, plants, cups, lamps),
   "surface" for backgrounds and large areas (sky, wall, ground, floor, pavement).
+- outline: how faithfully the illustrator must follow its silhouette.
+  "smooth" for clean shapes the drawing should simplify into flowing curves, perfect circles and straight lines,
+  ignoring jitter and compression noise (logos, buildings, furniture, people, clothes, hills, flat-design shapes).
+  "detailed" for intricate silhouettes whose every spike, notch and tip matters
+  (tree foliage, pine needles, grass, fur, hair strands, flames, splashes, lace, lettering).
+- group: true when the element is several separate copies of the same thing, such as a flock of birds,
+  scattered stars or a row of distant trees, false when it is one single thing.
 - center_x and center_y: the approximate center of the element as fractions of the image width and height,
   from 0 (left or top) to 1 (right or bottom).
 List the elements from back to front, in the order a painter would paint them: surfaces first, then objects,
@@ -40,12 +48,23 @@ ART_DIRECTION_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["name", "description", "sam_prompt", "kind", "center_x", "center_y"],
+                "required": [
+                    "name",
+                    "description",
+                    "sam_prompt",
+                    "kind",
+                    "outline",
+                    "group",
+                    "center_x",
+                    "center_y",
+                ],
                 "properties": {
                     "name": {"type": "string"},
                     "description": {"type": "string"},
                     "sam_prompt": {"type": "string"},
                     "kind": {"type": "string", "enum": ["object", "surface"]},
+                    "outline": {"type": "string", "enum": ["smooth", "detailed"]},
+                    "group": {"type": "boolean"},
                     "center_x": {"type": "number"},
                     "center_y": {"type": "number"},
                 },
@@ -62,6 +81,8 @@ class Element:
     sam_prompt: str
     kind: ElementKind
     center: tuple[float, float]
+    group: bool = False
+    outline: OutlineKind = "smooth"
 
 
 @dataclass(frozen=True)
@@ -73,7 +94,7 @@ class ArtDirection:
 
 def ask_art_director(client: ModelClient, image: Image.Image) -> ArtDirection:
     image_url = to_data_url(downscale_for_models(image))
-    raw = client.ask_for_json(ART_DIRECTOR_PROMPT, image_url, "ArtDirection", ART_DIRECTION_SCHEMA)
+    raw = client.ask_for_json(ART_DIRECTOR_PROMPT, [image_url], "ArtDirection", ART_DIRECTION_SCHEMA)
     return parse_art_direction(raw)
 
 
@@ -90,6 +111,8 @@ def parse_element(item: dict[str, Any]) -> Element:
         sam_prompt=item["sam_prompt"].strip(),
         kind="surface" if item["kind"] == "surface" else "object",
         center=(clamp_fraction(item["center_x"]), clamp_fraction(item["center_y"])),
+        group=bool(item.get("group", False)),
+        outline="detailed" if item.get("outline") == "detailed" else "smooth",
     )
 
 

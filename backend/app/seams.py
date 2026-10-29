@@ -9,7 +9,7 @@ from app.nearest_fill import fill_from_nearest
 from app.tracing import svg_document, trace_paths
 
 SEAM_STROKE_WIDTH = 1
-GAP_MAX_ALPHA = 250
+GAP_MAX_ALPHA = 128
 GAP_CONTEXT_MARGIN = 4
 
 

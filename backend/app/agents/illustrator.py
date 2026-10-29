@@ -6,7 +6,26 @@ from PIL import Image
 
 from app.agents.art_director import ArtDirection
 from app.agents.cutter import Cut
-from app.id_map import covering_id_map, path_centroids, path_fill_colors
+from app.edge_blends import snap_edge_blends
+from app.id_map import (
+    covering_id_map,
+    path_centroids,
+    path_fill_colors,
+    recolor_from_pixels,
+    split_regions_at_ink,
+)
+from app.ink_colors import split_ink_by_tone
+from app.outlines import (
+    DETAILED,
+    SMOOTH,
+    Edges,
+    Smoothing,
+    absorb_slivers,
+    box_image_edges,
+    context_box,
+    ink_outline_paths,
+    smooth_region_paths,
+)
 from app.ink import (
     UNOWNED,
     erase_ink,
@@ -14,15 +33,16 @@ from app.ink import (
     front_ink_owners,
     ink_path_colors,
     ink_reach,
-    overlapping_ink_region,
+    ink_clip_region,
+    keep_ink_on_top,
 )
+from app.region_merging import merge_similar_regions, snap_region_boundaries
 from app.seams import find_gaps, seal_seams, trace_gap_patch
 from app.svg_compaction import compact_markup
 from app.tracing import (
     downscale_for_tracing,
     recolor_binary_path,
     svg_document,
-    trace_binary_paths,
     trace_paths,
 )
 from app.underpaint import trace_underpaint, underpaint_regions
@@ -49,24 +69,32 @@ def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) ->
     trace_image = downscale_for_tracing(image)
     reach = ink_reach(trace_image)
     ink = find_ink(trace_image, reach)
-    color_image = erase_ink(trace_image, ink)
+    color_image = snap_edge_blends(erase_ink(trace_image, ink))
     paths = trace_paths(color_image, hierarchical="cutout")
-    ids = covering_id_map(paths, color_image.size)
+    paths, ids = split_regions_at_ink(paths, covering_id_map(paths, color_image.size), ink)
     names = layer_names(direction)
     owners = paint_object_owners(cuts, names, color_image.size)
+    color_pixels = np.asarray(color_image)
+    ids = merge_similar_regions(ids, color_pixels, owners)
+    ids = absorb_slivers(snap_region_boundaries(ids, color_pixels))
+    paths = recolor_from_pixels(paths, ids, color_pixels)
     path_owner = assign_paths(ids, owners, len(paths), len(names))
     unowned = path_owner == UNOWNED
     fill_unowned_paths(path_owner, paths, ids, direction, names)
+    region_detailed = detailed_layers(direction, names)[path_owner]
     names = adopt_unknown_objects(path_owner, unowned, paths, ids, direction, cuts, names)
+    ink_owner = front_ink_owners(ink, path_owner[ids], reach)
+    detailed = inherited_details(direction, names, path_owner, region_detailed)
+    paths, ids = smooth_region_paths(paths, keep_ink_on_top(ids, path_owner, ink, ink_owner), region_detailed)
     pixel_owner = path_owner[ids]
-    ink_owner = front_ink_owners(ink, pixel_owner, reach)
-    color_paths = group_color_paths(paths, path_owner, len(names))
+    color_paths = group_color_paths(paths, path_owner, np.bincount(ids.ravel(), minlength=len(paths) + 1), len(names))
     gaps, rendered = find_gaps([path for layer_paths in color_paths for path in layer_paths], color_image.size)
     underpaints = trace_underpaints(rendered, pixel_owner, path_owner, paths, ids, surface_indexes(direction, names))
     for index, name in enumerate(names):
         gap_patch = trace_gap_patch(rendered, gaps & (pixel_owner == index))
         color = color_part(color_paths[index], gap_patch, underpaints.get(index))
-        line = trace_ink_part(trace_image, overlapping_ink_region(ink, ink_owner, index))
+        smoothing = DETAILED if detailed[index] else SMOOTH
+        line = trace_ink_part(trace_image, ink, ink_clip_region(ink, ink_owner, index), smoothing)
         layer = assemble_layer(name, color, line)
         if layer:
             yield layer
@@ -80,6 +108,24 @@ def layer_names(direction: ArtDirection) -> list[str]:
     names = [element.name for element in direction.elements]
     has_surface = any(element.kind == "surface" for element in direction.elements)
     return names if has_surface else [BACKGROUND_LAYER, *names]
+
+
+def detailed_layers(direction: ArtDirection, names: list[str]) -> np.ndarray:
+    detailed = {element.name for element in direction.elements if element.outline == "detailed"}
+    return np.array([name in detailed for name in names])
+
+
+def inherited_details(
+    direction: ArtDirection, names: list[str], path_owner: np.ndarray, region_detailed: np.ndarray
+) -> np.ndarray:
+    planned = {element.name for element in direction.elements}
+    named = detailed_layers(direction, names)
+    return np.array(
+        [
+            named[index] if name in planned else bool(region_detailed[path_owner == index].any())
+            for index, name in enumerate(names)
+        ]
+    )
 
 
 def paint_object_owners(cuts: list[Cut], names: list[str], size: tuple[int, int]) -> np.ndarray:
@@ -221,10 +267,12 @@ def closest_color_surface(
     return nearest_surface(candidates, point)
 
 
-def group_color_paths(paths: list[str], path_owner: np.ndarray, layer_count: int) -> list[list[str]]:
+def group_color_paths(
+    paths: list[str], path_owner: np.ndarray, areas: np.ndarray, layer_count: int
+) -> list[list[str]]:
     grouped: list[list[str]] = [[] for _ in range(layer_count)]
-    for path_index, path in enumerate(paths, start=1):
-        grouped[path_owner[path_index]].append(seal_seams(path))
+    for path_index in sorted(range(1, len(paths) + 1), key=lambda index: -areas[index]):
+        grouped[path_owner[path_index]].append(seal_seams(paths[path_index - 1]))
     return grouped
 
 
@@ -233,17 +281,25 @@ def color_part(paths: list[str], gap_patch: str | None, underpaint: str | None) 
     return LayerPart(paths=patched, offset=(0, 0)) if patched else None
 
 
-def trace_ink_part(image: Image.Image, region: np.ndarray) -> LayerPart | None:
-    box = Image.fromarray(region.astype(np.uint8) * 255).getbbox()
+def trace_ink_part(image: Image.Image, ink: np.ndarray, clip: np.ndarray, smoothing: Smoothing) -> LayerPart | None:
+    box = Image.fromarray((ink & clip).astype(np.uint8) * 255).getbbox()
     if box is None:
         return None
-    left, top, right, bottom = box
-    region_crop = region[top:bottom, left:right]
-    paths = trace_binary_paths(region_crop)
-    if not paths:
-        return None
-    colors = ink_path_colors(paths, np.asarray(image)[top:bottom, left:right], region_crop)
-    return LayerPart(paths=[recolor_binary_path(path, color) for path, color in zip(paths, colors)], offset=(left, top))
+    top, bottom, left, right = context_box((box[1], box[3], box[0], box[2]), ink.shape)
+    ink_crop, clip_crop = ink[top:bottom, left:right], clip[top:bottom, left:right]
+    pixels = np.asarray(image)[top:bottom, left:right]
+    edges = box_image_edges((top, bottom, left, right), ink.shape)
+    tones = split_ink_by_tone(pixels, ink_crop)
+    paths = [path for tone in tones for path in trace_tone_paths(pixels, tone, edges, clip_crop, smoothing)]
+    return LayerPart(paths=paths, offset=(left, top)) if paths else None
+
+
+def trace_tone_paths(
+    pixels: np.ndarray, tone: np.ndarray, edges: Edges, clip: np.ndarray, smoothing: Smoothing
+) -> list[str]:
+    paths = ink_outline_paths(tone, edges, clip, smoothing)
+    colors = ink_path_colors(paths, pixels, tone) if paths else []
+    return [recolor_binary_path(path, color) for path, color in zip(paths, colors)]
 
 
 def assemble_layer(name: str, color: LayerPart | None, line: LayerPart | None) -> Layer | None:

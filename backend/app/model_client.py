@@ -18,19 +18,14 @@ class ModelClient:
         self._client = OpenAI(base_url=settings.model_api_base_url, api_key=settings.model_api_key)
         self._budget = budget
 
-    def ask_for_json(self, prompt: str, image_url: str, schema_name: str, schema: dict[str, Any]) -> dict[str, Any]:
+    def ask_for_json(
+        self, prompt: str, image_urls: list[str], schema_name: str, schema: dict[str, Any]
+    ) -> dict[str, Any]:
         self._budget.reserve()
+        images = [{"type": "image_url", "image_url": {"url": image_url}} for image_url in image_urls]
         response = self._client.chat.completions.create(
             model=SPARK_MODEL,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": image_url}},
-                    ],
-                }
-            ],
+            messages=[{"role": "user", "content": [{"type": "text", "text": prompt}, *images]}],
             response_format={
                 "type": "json_schema",
                 "json_schema": {"name": schema_name, "strict": True, "schema": schema},

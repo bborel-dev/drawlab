@@ -1,6 +1,7 @@
 import io
 import re
 
+import cv2
 import numpy as np
 import resvg_py
 from PIL import Image
@@ -43,3 +44,47 @@ def path_centroids(ids: np.ndarray, path_count: int) -> np.ndarray:
     sum_y = np.bincount(flat_ids, weights=rows.ravel(), minlength=path_count + 1)
     safe_areas = np.maximum(areas, 1.0)
     return np.stack([sum_x / safe_areas, sum_y / safe_areas], axis=1)
+
+
+def recolor_from_pixels(paths: list[str], ids: np.ndarray, pixels: np.ndarray) -> list[str]:
+    count = len(paths) + 1
+    flat_ids = ids.ravel()
+    areas = np.bincount(flat_ids, minlength=count)
+    channels = [np.bincount(flat_ids, weights=pixels[..., channel].ravel(), minlength=count) for channel in range(3)]
+    means = np.stack(channels, axis=1) / np.maximum(areas, 1)[:, None]
+    return [
+        FILL_PATTERN.sub(hex_fill(means[index + 1]), path, count=1) if areas[index + 1] else path
+        for index, path in enumerate(paths)
+    ]
+
+
+def hex_fill(color: np.ndarray) -> str:
+    red, green, blue = np.clip(color.round(), 0, 255).astype(int)
+    return f'fill="#{red:02X}{green:02X}{blue:02X}"'
+
+
+def label_boxes(ids: np.ndarray, count: int) -> dict[int, tuple[int, int, int, int]]:
+    flat = ids.ravel()
+    order = np.argsort(flat, kind="stable")
+    starts = np.searchsorted(flat[order], np.arange(count + 1))
+    ends = np.searchsorted(flat[order], np.arange(count + 1), side="right")
+    width = ids.shape[1]
+    boxes = {}
+    for label in range(1, count + 1):
+        members = order[starts[label] : ends[label]]
+        if len(members):
+            rows, columns = members // width, members % width
+            boxes[label] = (int(rows.min()), int(rows.max()) + 1, int(columns.min()), int(columns.max()) + 1)
+    return boxes
+
+
+def split_regions_at_ink(paths: list[str], ids: np.ndarray, ink: np.ndarray) -> tuple[list[str], np.ndarray]:
+    split = ids.copy()
+    split_paths = list(paths)
+    for label, (top, bottom, left, right) in label_boxes(ids, len(paths)).items():
+        region = (ids[top:bottom, left:right] == label) & ~ink[top:bottom, left:right]
+        count, parts = cv2.connectedComponents(region.astype(np.uint8), connectivity=4)
+        for part in range(2, count):
+            split_paths.append(paths[label - 1])
+            split[top:bottom, left:right][parts == part] = len(split_paths)
+    return split_paths, fill_from_nearest(split[..., None], ~ink)[..., 0]

@@ -6,6 +6,7 @@ from PIL import Image
 
 from app.agents.art_director import ArtDirection, ask_art_director, parse_art_direction
 from app.agents.cutter import Cut, cut_elements, mock_cut_elements
+from app.agents.mask_reviewer import MaskFix, check_masks
 from app.agents.illustrator import draw_layers
 from app.budget import BudgetExceededError, CallBudget
 from app.config import Settings
@@ -76,17 +77,32 @@ def direct_art(client: ModelClient | None, image: Image.Image) -> Iterator[Agent
 
 def cut_objects(client: ModelClient | None, image: Image.Image, direction: ArtDirection) -> Iterator[AgentEvent]:
     yield AgentEvent("cutter", "working", "Segmenting each object")
-    cuts: list[Cut] = []
-    for cut in mock_cut_elements(direction) if client is None else cut_elements(client, image, direction):
-        cuts.append(cut)
+    if client is None:
+        cuts = list(mock_cut_elements(direction))
+    else:
+        cuts = yield from cut_and_check(client, image, direction)
+    for cut in cuts:
         yield AgentEvent("cutter", "working", cut_message(cut), mask=outline_of(cut))
     found = sum(1 for cut in cuts if cut.mask)
     yield AgentEvent("cutter", "done", f"Found {found} of {len(cuts)} objects")
     return cuts
 
 
+def cut_and_check(client: ModelClient, image: Image.Image, direction: ArtDirection) -> Iterator[AgentEvent]:
+    cuts = list(cut_elements(client, image, direction))
+    yield AgentEvent("cutter", "working", f"Checking {len(cuts)} masks with Muse Spark")
+    check = check_masks(client, image, direction, cuts)
+    if check.fixes:
+        yield AgentEvent("cutter", "working", fix_message(check.fixes))
+    return check.cuts
+
+
 def cut_message(cut: Cut) -> str:
     return f"Found {cut.element_name}" if cut.mask else f"Could not find {cut.element_name}"
+
+
+def fix_message(fixes: list[MaskFix]) -> str:
+    return "Re-cut " + ", ".join(fix.element_name for fix in fixes) + " with boxes"
 
 
 def outline_of(cut: Cut) -> MaskOutline | None:
