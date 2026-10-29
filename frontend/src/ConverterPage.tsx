@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { applyAgentEvent, initialAgentStates } from './agents'
-import { streamDrawing, type Canvas } from './api'
+import { streamDrawing, type Canvas, type MaskOutline } from './api'
 import CompareFrame from './CompareFrame'
 import DrawingCanvas from './DrawingCanvas'
 import { drawingProgress } from './drawingProgress'
 import DrawingStatus from './DrawingStatus'
 import DropZone from './DropZone'
 import { downloadSvg, svgDocument, svgFileName, type Drawing } from './layers'
+import SegmentationOverlay from './SegmentationOverlay'
 import ViewSwitch, { type CompareView } from './ViewSwitch'
 
 type Phase = 'empty' | 'drawing' | 'done'
@@ -29,6 +30,9 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
   const [source, setSource] = useState<Source | null>(null)
   const [canvas, setCanvas] = useState<Canvas | null>(null)
   const [layers, setLayers] = useState<string[]>([])
+  const [masks, setMasks] = useState<MaskOutline[]>([])
+  const [maskRevealEndsAt, setMaskRevealEndsAt] = useState<number | null>(null)
+  const [segmentationShown, setSegmentationShown] = useState(false)
   const [agentStates, setAgentStates] = useState(initialAgentStates)
   const [currentLayer, setCurrentLayer] = useState<string | null>(null)
   const [startedLayers, setStartedLayers] = useState(0)
@@ -51,6 +55,15 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
     return () => window.clearTimeout(timer)
   }, [phase, streamDone, drawingEndsAt])
 
+  useEffect(() => {
+    if (!canvas || segmentationShown || (masks.length > 0 && maskRevealEndsAt === null)) return
+    const timer = window.setTimeout(
+      () => setSegmentationShown(true),
+      Math.max(0, (maskRevealEndsAt ?? 0) - performance.now()),
+    )
+    return () => window.clearTimeout(timer)
+  }, [canvas, segmentationShown, masks.length, maskRevealEndsAt])
+
   const sourceName = source?.name
   const drawing = useMemo<Drawing | null>(
     () => (streamDone && canvas && sourceName ? { canvas, layers, sourceName } : null),
@@ -68,10 +81,15 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
 
   const handleDrawingEnd = useCallback((endsAt: number) => setDrawingEndsAt(endsAt), [])
 
+  const handleMaskRevealEnd = useCallback((endsAt: number) => setMaskRevealEndsAt(endsAt), [])
+
   function resetDrawing() {
     abortRef.current?.abort()
     setCanvas(null)
     setLayers([])
+    setMasks([])
+    setMaskRevealEndsAt(null)
+    setSegmentationShown(false)
     setAgentStates(initialAgentStates())
     setCurrentLayer(null)
     setStartedLayers(0)
@@ -107,6 +125,8 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
         (event) => {
           setAgentStates((current) => applyAgentEvent(current, event))
           if (event.canvas) setCanvas(event.canvas)
+          const mask = event.mask
+          if (mask) setMasks((current) => [...current, mask])
           const layer = event.layer
           if (layer) {
             outcome.layerCount += 1
@@ -132,6 +152,8 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
     setCurrentLayer(null)
     setStartedLayers(0)
     setDrawingEndsAt(null)
+    setMaskRevealEndsAt(null)
+    setSegmentationShown(false)
     setPhase('drawing')
   }
 
@@ -161,6 +183,7 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
     startedLayers,
     totalLayers: layers.length,
     streamDone,
+    revealingMasks: canvas !== null && !segmentationShown,
   })
 
   return (
@@ -184,7 +207,7 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
       </div>
 
       <CompareFrame sourceUrl={source.url} sourceFormat={source.format} view={phase === 'done' ? view : null}>
-        {canvas ? (
+        {canvas && segmentationShown ? (
           <DrawingCanvas
             key={replayCount}
             canvas={canvas}
@@ -193,7 +216,14 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
             onDrawingEndChange={handleDrawingEnd}
           />
         ) : (
-          <img className="frame-placeholder" src={source.url} alt="Original image being studied" />
+          <>
+            <img
+              className={masks.length > 0 ? 'frame-placeholder frame-placeholder-segmented' : 'frame-placeholder'}
+              src={source.url}
+              alt="Original image being studied"
+            />
+            <SegmentationOverlay key={replayCount} masks={masks} onRevealEndChange={handleMaskRevealEnd} />
+          </>
         )}
       </CompareFrame>
 

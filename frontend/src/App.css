@@ -500,6 +500,66 @@
   }
 }
 
+.frame-placeholder-segmented {
+  opacity: 0.55;
+  filter: grayscale(0.85);
+  animation: none;
+}
+
+.segmentation {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.segmentation svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mask-shape {
+  fill: var(--mask-color);
+  fill-opacity: 0;
+  stroke: var(--mask-color);
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  stroke-linejoin: round;
+  animation: mask-reveal 900ms ease-out forwards;
+}
+
+@keyframes mask-reveal {
+  60% {
+    fill-opacity: 0.12;
+    stroke-dashoffset: 0;
+  }
+  to {
+    fill-opacity: 0.38;
+    stroke-dashoffset: 0;
+  }
+}
+
+.mask-label {
+  position: absolute;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--mask-color);
+  box-shadow: 0 6px 16px -8px rgb(20 20 40 / 50%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  animation: label-pop 400ms 300ms ease-out backwards;
+}
+
+@keyframes label-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+}
+
 .frame-before {
   position: absolute;
   inset: 0;
@@ -645,6 +705,12 @@
 
 .step-done {
   color: var(--color-text);
+}
+
+.step-model {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+  opacity: 0.7;
 }
 
 .step-done .step-dot {
@@ -1332,10 +1398,17 @@
 @media (prefers-reduced-motion: reduce) {
   .blob,
   .frame-placeholder,
+  .mask-shape,
+  .mask-label,
   .hackathon-badge,
   .model-name,
   .talk-bar,
   .talk-badge {
     animation: none;
+  }
+
+  .mask-shape {
+    fill-opacity: 0.38;
+    stroke-dashoffset: 0;
   }
 }

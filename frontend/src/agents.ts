@@ -7,10 +7,10 @@ export type AgentState = {
 
 export type AgentStates = Record<AgentName, AgentState>
 
-export const AGENTS: { name: AgentName; label: string }[] = [
-  { name: 'art-director', label: 'Art Director' },
-  { name: 'cutter', label: 'Cutter' },
-  { name: 'illustrator', label: 'Illustrator' },
+export const AGENTS: { name: AgentName; label: string; model: string }[] = [
+  { name: 'art-director', label: 'Analysis', model: 'Muse Spark' },
+  { name: 'cutter', label: 'Segmentation', model: 'SAM 3.1' },
+  { name: 'illustrator', label: 'Tracing', model: 'vtracer' },
 ]
 
 export function agentLabel(name: AgentName): string {

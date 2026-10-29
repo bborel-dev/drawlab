@@ -2,6 +2,7 @@ export type StepState = 'done' | 'active' | 'pending'
 
 export type Step = {
   label: string
+  model: string
   state: StepState
 }
 
@@ -49,6 +50,7 @@ function DrawingStatus({ agent, action, detail, progress, steps }: DrawingStatus
               )}
             </span>
             {step.label}
+            <span className="step-model">{step.model}</span>
           </li>
         ))}
       </ol>

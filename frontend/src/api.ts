@@ -7,12 +7,20 @@ export type Canvas = {
   height: number
 }
 
+export type MaskOutline = {
+  name: string
+  path: string
+  width: number
+  height: number
+}
+
 export type AgentEvent = {
   agent: AgentName
   status: AgentStatus
   message: string
   layer: string | null
   canvas: Canvas | null
+  mask: MaskOutline | null
 }
 
 const EVENT_SEPARATOR = '\n\n'

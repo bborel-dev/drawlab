@@ -10,6 +10,7 @@ from app.agents.illustrator import draw_layers
 from app.budget import BudgetExceededError, CallBudget
 from app.config import Settings
 from app.fixtures import load_art_direction
+from app.masks import mask_outline
 from app.model_client import ModelClient
 from app.tracing import downscale_for_tracing
 
@@ -26,12 +27,21 @@ class Canvas:
 
 
 @dataclass(frozen=True)
+class MaskOutline:
+    name: str
+    path: str
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
 class AgentEvent:
     agent: AgentName
     status: AgentStatus
     message: str
     layer: str | None = None
     canvas: Canvas | None = None
+    mask: MaskOutline | None = None
 
 
 def run_drawing_job(image: Image.Image, settings: Settings) -> Iterator[AgentEvent]:
@@ -65,18 +75,25 @@ def direct_art(client: ModelClient | None, image: Image.Image) -> Iterator[Agent
 
 
 def cut_objects(client: ModelClient | None, image: Image.Image, direction: ArtDirection) -> Iterator[AgentEvent]:
-    yield AgentEvent("cutter", "working", "Cutting out each object")
+    yield AgentEvent("cutter", "working", "Segmenting each object")
     cuts: list[Cut] = []
     for cut in mock_cut_elements(direction) if client is None else cut_elements(client, image, direction):
         cuts.append(cut)
-        yield AgentEvent("cutter", "working", cut_message(cut))
+        yield AgentEvent("cutter", "working", cut_message(cut), mask=outline_of(cut))
     found = sum(1 for cut in cuts if cut.mask)
-    yield AgentEvent("cutter", "done", f"Cut {found} of {len(cuts)} objects")
+    yield AgentEvent("cutter", "done", f"Found {found} of {len(cuts)} objects")
     return cuts
 
 
 def cut_message(cut: Cut) -> str:
-    return f"Cut {cut.element_name}" if cut.mask else f"Could not find {cut.element_name}"
+    return f"Found {cut.element_name}" if cut.mask else f"Could not find {cut.element_name}"
+
+
+def outline_of(cut: Cut) -> MaskOutline | None:
+    if cut.mask is None:
+        return None
+    width, height = cut.mask.size
+    return MaskOutline(cut.element_name, mask_outline(cut.mask), width, height)
 
 
 def illustrate(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) -> Iterator[AgentEvent]:

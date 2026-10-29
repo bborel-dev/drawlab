@@ -15,6 +15,7 @@ type ProgressInput = {
   startedLayers: number
   totalLayers: number
   streamDone: boolean
+  revealingMasks: boolean
 }
 
 const PLANNING_SHARE = 0.1
@@ -26,11 +27,12 @@ export function drawingProgress(input: ProgressInput): DrawingProgress {
     ...currentAction(input),
     detail: layerDetail(input),
     progress: overallProgress(input),
-    steps: AGENTS.map((agent) => ({ label: agent.label, state: stepState(agent.name, input) })),
+    steps: AGENTS.map((agent) => ({ label: agent.label, model: agent.model, state: stepState(agent.name, input) })),
   }
 }
 
-function currentAction({ states, currentLayer }: ProgressInput): { agent: string; action: string } {
+function currentAction({ states, currentLayer, revealingMasks }: ProgressInput): { agent: string; action: string } {
+  if (revealingMasks) return { agent: agentLabel('cutter'), action: lowerFirst(states.cutter.message) }
   if (currentLayer) return { agent: agentLabel('illustrator'), action: `drawing ${currentLayer}` }
   const agent = workingAgent(states)
   if (agent) return { agent: agentLabel(agent), action: lowerFirst(states[agent].message) }
@@ -49,7 +51,11 @@ function overallProgress({ states, startedLayers, totalLayers, streamDone }: Pro
   return planned + cut + DRAWING_SHARE * (startedLayers / Math.max(expectedLayers, 1))
 }
 
-function stepState(name: (typeof AGENTS)[number]['name'], { states, startedLayers }: ProgressInput): StepState {
+function stepState(
+  name: (typeof AGENTS)[number]['name'],
+  { states, startedLayers, revealingMasks }: ProgressInput,
+): StepState {
+  if (revealingMasks && name !== 'art-director') return name === 'cutter' ? 'active' : 'pending'
   if (name === 'illustrator') return startedLayers > 0 || states.illustrator.status !== 'idle' ? 'active' : 'pending'
   if (isDone(states[name])) return 'done'
   return states[name].status === 'working' ? 'active' : 'pending'
