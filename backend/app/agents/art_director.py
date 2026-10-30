@@ -8,6 +8,7 @@ from app.images import downscale_for_models, to_data_url
 from app.model_client import ModelClient
 
 MAX_ELEMENTS = 25
+MAX_ANCHORS = 4
 
 ElementKind = Literal["object", "surface"]
 OutlineKind = Literal["smooth", "detailed"]
@@ -30,6 +31,9 @@ For each element give:
   scattered stars or a row of distant trees, false when it is one single thing.
 - center_x and center_y: the approximate center of the element as fractions of the image width and height,
   from 0 (left or top) to 1 (right or bottom).
+- anchors: one to four points, in the same fractions, that land on clearly visible parts of the element,
+  away from its edges and never on another element in front of it.
+  When an element shows in several separate parts, such as a wall on both sides of a window, put one point in each part.
 List the elements from back to front, in the order a painter would paint them: surfaces first, then objects,
 each object after every element it covers. A person sitting on a chair comes after the chair,
 and a cup on a table comes after the table.
@@ -57,6 +61,7 @@ ART_DIRECTION_SCHEMA: dict[str, Any] = {
                     "group",
                     "center_x",
                     "center_y",
+                    "anchors",
                 ],
                 "properties": {
                     "name": {"type": "string"},
@@ -67,6 +72,15 @@ ART_DIRECTION_SCHEMA: dict[str, Any] = {
                     "group": {"type": "boolean"},
                     "center_x": {"type": "number"},
                     "center_y": {"type": "number"},
+                    "anchors": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["x", "y"],
+                            "properties": {"x": {"type": "number"}, "y": {"type": "number"}},
+                        },
+                    },
                 },
             },
         },
@@ -83,6 +97,7 @@ class Element:
     center: tuple[float, float]
     group: bool = False
     outline: OutlineKind = "smooth"
+    anchors: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -113,6 +128,9 @@ def parse_element(item: dict[str, Any]) -> Element:
         center=(clamp_fraction(item["center_x"]), clamp_fraction(item["center_y"])),
         group=bool(item.get("group", False)),
         outline="detailed" if item.get("outline") == "detailed" else "smooth",
+        anchors=tuple(
+            (clamp_fraction(anchor["x"]), clamp_fraction(anchor["y"])) for anchor in item.get("anchors", [])[:MAX_ANCHORS]
+        ),
     )
 
 

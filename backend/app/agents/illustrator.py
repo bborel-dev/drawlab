@@ -36,7 +36,7 @@ from app.ink import (
     ink_clip_region,
     keep_ink_on_top,
 )
-from app.region_merging import merge_similar_regions, snap_region_boundaries
+from app.region_merging import merge_similar_regions, snap_region_boundaries, split_regions_by_owner
 from app.seams import find_gaps, seal_seams, trace_gap_patch
 from app.svg_compaction import compact_markup
 from app.tracing import (
@@ -45,8 +45,9 @@ from app.tracing import (
     svg_document,
     trace_paths,
 )
-from app.underpaint import trace_underpaint, underpaint_regions
-from app.unknown_objects import color_name, find_unknown_objects, surface_tone_map
+from app.surfaces import attach_object_fragments, grow_surfaces, split_contested_regions
+from app.underpaint import layer_sources, source_paths, trace_underpaint, underpaint_regions
+from app.unknown_objects import color_name, find_unknown_objects, is_enclosed, surface_tone_map
 
 BACKGROUND_LAYER = "background"
 SURFACE_COLOR_TIE = 30
@@ -75,21 +76,27 @@ def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) ->
     names = layer_names(direction)
     owners = paint_object_owners(cuts, names, color_image.size)
     color_pixels = np.asarray(color_image)
-    ids = merge_similar_regions(ids, color_pixels, owners)
-    ids = absorb_slivers(snap_region_boundaries(ids, color_pixels))
+    paths, ids = split_regions_by_owner(paths, ids, owners)
+    surfaces = surface_centers(direction, names, color_image.size)
+    paths, ids = split_contested_regions(paths, ids, owners, surfaces)
     paths = recolor_from_pixels(paths, ids, color_pixels)
     path_owner = assign_paths(ids, owners, len(paths), len(names))
     unowned = path_owner == UNOWNED
     fill_unowned_paths(path_owner, paths, ids, direction, names)
     region_detailed = detailed_layers(direction, names)[path_owner]
     names = adopt_unknown_objects(path_owner, unowned, paths, ids, direction, cuts, names)
+    ids = merge_similar_regions(ids, color_pixels, path_owner[ids])
+    ids = absorb_slivers(snap_region_boundaries(ids, color_pixels))
+    paths = recolor_from_pixels(paths, ids, color_pixels)
     ink_owner = front_ink_owners(ink, path_owner[ids], reach)
     detailed = inherited_details(direction, names, path_owner, region_detailed)
     paths, ids = smooth_region_paths(paths, keep_ink_on_top(ids, path_owner, ink, ink_owner), region_detailed)
     pixel_owner = path_owner[ids]
     color_paths = group_color_paths(paths, path_owner, np.bincount(ids.ravel(), minlength=len(paths) + 1), len(names))
     gaps, rendered = find_gaps([path for layer_paths in color_paths for path in layer_paths], color_image.size)
-    underpaints = trace_underpaints(rendered, pixel_owner, path_owner, paths, ids, surface_indexes(direction, names))
+    underpaints = trace_underpaints(
+        rendered, pixel_owner, path_owner, paths, ids, surface_indexes(direction, names), len(names)
+    )
     for index, name in enumerate(names):
         gap_patch = trace_gap_patch(rendered, gaps & (pixel_owner == index))
         color = color_part(color_paths[index], gap_patch, underpaints.get(index))
@@ -149,17 +156,17 @@ def assign_paths(ids: np.ndarray, owners: np.ndarray, path_count: int, layer_cou
 def fill_unowned_paths(
     path_owner: np.ndarray, paths: list[str], ids: np.ndarray, direction: ArtDirection, names: list[str]
 ) -> None:
+    colors = path_fill_colors(paths)
+    attach_object_fragments(path_owner, ids, colors)
     unowned = np.flatnonzero(path_owner == UNOWNED)
     surfaces = surface_centers(direction, names, (ids.shape[1], ids.shape[0]))
     if not surfaces:
         path_owner[unowned] = 0
         return
+    grow_surfaces(path_owner, ids, colors, surfaces)
     centroids = path_centroids(ids, len(paths))
-    for path_index in unowned:
-        path_owner[path_index] = nearest_surface(surfaces, centroids[path_index])
-    colors = path_fill_colors(paths)
     dominant = dominant_surface_colors(path_owner, colors, np.bincount(ids.ravel(), minlength=len(paths) + 1), surfaces)
-    for path_index in unowned:
+    for path_index in unowned[path_owner[unowned] == UNOWNED]:
         path_owner[path_index] = closest_color_surface(colors[path_index], centroids[path_index], surfaces, dominant)
 
 
@@ -177,6 +184,8 @@ def adopt_unknown_objects(
     adopted = list(names)
     for unknown in find_unknown_objects(path_owner, unowned, path_fill_colors(paths), ids, surfaces):
         owner = next((index for index, center_path in missed.items() if center_path in unknown.paths), None)
+        if owner is None and not is_enclosed(unknown.paths, path_owner, ids):
+            continue
         if owner is None:
             adopted.append(unique_name(f"{color_name(unknown.color)}-shape", adopted))
             owner = len(adopted) - 1
@@ -207,12 +216,15 @@ def trace_underpaints(
     paths: list[str],
     ids: np.ndarray,
     surfaces: list[int],
+    layer_count: int,
 ) -> dict[int, str | None]:
     areas = np.bincount(ids.ravel(), minlength=len(paths) + 1)
-    tones = surface_tone_map(path_owner, path_fill_colors(paths), areas, surfaces)
+    colors = path_fill_colors(paths)
+    tones = surface_tone_map(path_owner, colors, areas, list(range(layer_count)))
+    sources = layer_sources(pixel_owner, source_paths(path_owner, colors, areas, tones)[ids], layer_count)
     return {
-        surface: trace_underpaint(rendered, pixel_owner, surface, region, tones.get(surface))
-        for surface, region in underpaint_regions(pixel_owner, surfaces).items()
+        layer: trace_underpaint(rendered, pixel_owner, sources, layer, region)
+        for layer, region in underpaint_regions(pixel_owner, sources, surfaces, layer_count).items()
     }
 
 
@@ -233,9 +245,10 @@ def surface_centers(
     direction: ArtDirection, names: list[str], size: tuple[int, int]
 ) -> list[tuple[int, tuple[float, float]]]:
     return [
-        (names.index(element.name), (element.center[0] * size[0], element.center[1] * size[1]))
+        (names.index(element.name), (x * size[0], y * size[1]))
         for element in direction.elements
         if element.kind == "surface"
+        for x, y in element.anchors or (element.center,)
     ]
 
 

@@ -11,6 +11,8 @@ SNAP_ITERATIONS = 3
 STRONG_SNAP_BLUR_SIGMA = 0.6
 STRONG_SNAP_ITERATIONS = 25
 STRONG_EDGE_DELTA_E = 20.0
+MIN_PART_WIDTH = 3.0
+MIN_PART_SHARE = 0.0005
 
 
 class RegionGraph:
@@ -168,3 +170,24 @@ def region_widths(ids: np.ndarray) -> np.ndarray:
     sides = [ids[:, 1:][horizontal], ids[:, :-1][horizontal], ids[1:, :][vertical], ids[:-1, :][vertical]]
     perimeter = sum(np.bincount(side, minlength=count) for side in sides).astype(np.float64)
     return np.where(perimeter > 0, 2 * area / np.maximum(perimeter, 1), np.inf)
+
+
+def split_regions_by_owner(paths: list[str], ids: np.ndarray, owners: np.ndarray) -> tuple[list[str], np.ndarray]:
+    columns = int(owners.max()) + 2
+    pairs, inverse, counts = np.unique(
+        ids.astype(np.int64) * columns + (owners + 1), return_inverse=True, return_counts=True
+    )
+    regions = pairs // columns
+    order = np.lexsort((-counts, regions))
+    majority = np.ones(len(order), dtype=bool)
+    majority[1:] = regions[order][1:] != regions[order][:-1]
+    extra = order[~majority]
+    labels = regions.copy()
+    labels[extra] = len(paths) + 1 + np.arange(len(extra))
+    split = labels[inverse.reshape(ids.shape)]
+    origin = np.concatenate([np.arange(len(paths) + 1), regions[extra]])
+    areas = np.bincount(split.ravel(), minlength=len(origin))
+    minor = (region_widths(split) < MIN_PART_WIDTH) | (areas < MIN_PART_SHARE * ids.size)
+    minor[: len(paths) + 1] = False
+    return paths + [paths[region - 1] for region in regions[extra]], np.where(minor[split], origin[split], split)
+

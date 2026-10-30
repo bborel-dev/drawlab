@@ -7,6 +7,8 @@ import numpy as np
 COLOR_DISTANCE = 40
 SURFACE_TONE_SHARE = 0.15
 MIN_AREA_RATIO = 0.0015
+ENCLOSURE_REACH = 5
+ENCLOSURE_SHARE = 0.6
 OPENING_RATIO = 1 / 300
 GRAY_SATURATION = 0.18
 WARM_HUES = ((0, 65), (335, 360))
@@ -38,6 +40,14 @@ def find_unknown_objects(
     path_blob = majority_blob(ids, labels, label_count, len(path_owner))
     blobs = [np.flatnonzero(foreign & (path_blob == label)) for label in range(1, label_count)]
     return [UnknownObject(blob, colors[blob[areas[blob].argmax()]]) for blob in blobs if len(blob)]
+
+
+def is_enclosed(paths: np.ndarray, path_owner: np.ndarray, ids: np.ndarray) -> bool:
+    blob = np.isin(ids, paths)
+    reach = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * ENCLOSURE_REACH + 1, 2 * ENCLOSURE_REACH + 1))
+    ring = (cv2.dilate(blob.astype(np.uint8), reach) > 0) & ~blob
+    surface = np.bincount(path_owner[paths]).argmax()
+    return bool(ring.any()) and float((path_owner[ids[ring]] == surface).mean()) >= ENCLOSURE_SHARE
 
 
 def surface_tone_map(
