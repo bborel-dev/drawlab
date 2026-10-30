@@ -64,6 +64,11 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
     return () => window.clearTimeout(timer)
   }, [canvas, segmentationShown, masks.length, maskRevealEndsAt])
 
+  useEffect(() => {
+    if (!source) return
+    return () => URL.revokeObjectURL(source.url)
+  }, [source])
+
   const sourceName = source?.name
   const drawing = useMemo<Drawing | null>(
     () => (streamDone && canvas && sourceName ? { canvas, layers, sourceName } : null),

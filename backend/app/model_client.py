@@ -55,6 +55,9 @@ class ModelClient:
         return output_text
 
     def _record_spark_usage(self, usage: Any) -> None:
+        if usage is None:
+            self._budget.record(SPARK_MODEL, 0.0, "usage=missing")
+            return
         details = usage.completion_tokens_details
         reasoning_tokens = details.reasoning_tokens if details else 0
         cost = usage.prompt_tokens * SPARK_INPUT_USD_PER_TOKEN + usage.completion_tokens * SPARK_OUTPUT_USD_PER_TOKEN

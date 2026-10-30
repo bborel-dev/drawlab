@@ -7,6 +7,7 @@ MAX_INK_TONES = 8
 SAME_TONE_DELTA_E = 18.0
 KMEANS_SAMPLE = 20000
 KMEANS_ATTEMPTS = 3
+KMEANS_SEED = 0
 TONE_OVERLAP = 3
 
 
@@ -34,9 +35,10 @@ def ink_core(ink: np.ndarray) -> np.ndarray:
 def merged_tones(samples: np.ndarray) -> np.ndarray:
     if len(samples) < MAX_INK_TONES:
         return samples.mean(axis=0, keepdims=True) if len(samples) else np.zeros((0, 3), np.float32)
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(KMEANS_SEED)
     fit = samples[rng.choice(len(samples), min(len(samples), KMEANS_SAMPLE), replace=False)]
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.5)
+    cv2.setRNGSeed(KMEANS_SEED)
     _, labels, centers = cv2.kmeans(fit, MAX_INK_TONES, None, criteria, KMEANS_ATTEMPTS, cv2.KMEANS_PP_CENTERS)
     counts = np.bincount(labels.ravel(), minlength=MAX_INK_TONES).astype(float)
     return merge_close_tones(centers, counts)

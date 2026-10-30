@@ -108,8 +108,9 @@ def fix_message(fixes: list[MaskFix]) -> str:
 def outline_of(cut: Cut) -> MaskOutline | None:
     if cut.mask is None:
         return None
+    path = mask_outline(cut.mask)
     width, height = cut.mask.size
-    return MaskOutline(cut.element_name, mask_outline(cut.mask), width, height)
+    return MaskOutline(cut.element_name, path, width, height) if path else None
 
 
 def illustrate(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) -> Iterator[AgentEvent]:

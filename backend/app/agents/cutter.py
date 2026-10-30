@@ -109,6 +109,8 @@ def merge_instances(segmented: Segmented, size: tuple[int, int]) -> list[Instanc
     for prompt, (records, _) in segmented.items():
         for record in records:
             mask = np.asarray(render_mask(record, size)) > 0
+            if not mask.any():
+                continue
             same = next((instance for instance in instances if iou(instance.mask, mask) > SAME_INSTANCE_IOU), None)
             if same:
                 same.prompts.add(prompt)

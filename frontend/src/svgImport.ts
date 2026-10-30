@@ -7,7 +7,8 @@ export type ImportedSvg = {
 }
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
-const UNSAFE_ELEMENTS = 'script, foreignObject, iframe, object, embed'
+const UNSAFE_ELEMENTS =
+  'script, foreignObject, iframe, object, embed, animate[attributeName$="href" i], set[attributeName$="href" i]'
 const SHARED_ELEMENTS = new Set(['defs', 'style'])
 const IGNORED_ELEMENTS = new Set(['title', 'desc', 'metadata'])
 const TAG_NAMES: Record<string, string> = { g: 'group', a: 'link' }

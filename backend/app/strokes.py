@@ -1,3 +1,5 @@
+from functools import cache
+
 import cv2
 import numpy as np
 
@@ -13,6 +15,7 @@ MIN_SPUR_POINTS = 3
 
 Pixel = tuple[int, int]
 NEIGHBOR_OFFSETS = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+NEIGHBOR_WEIGHTS = np.array([[128, 1, 2], [64, 0, 4], [32, 16, 8]], dtype=np.float32)
 
 
 def split_thin_strokes(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -40,8 +43,8 @@ def skeletonize(mask: np.ndarray) -> np.ndarray:
     image = mask.astype(np.uint8)
     while True:
         changed = False
-        for step in (0, 1):
-            removable = thinning_candidates(image, step)
+        for table in thinning_tables():
+            removable = (image == 1) & table[neighbor_codes(image)]
             if removable.any():
                 image[removable] = 0
                 changed = True
@@ -49,19 +52,28 @@ def skeletonize(mask: np.ndarray) -> np.ndarray:
             return image.astype(bool)
 
 
-def thinning_candidates(image: np.ndarray, step: int) -> np.ndarray:
-    padded = np.pad(image, 1)
-    north, north_east, east = padded[:-2, 1:-1], padded[:-2, 2:], padded[1:-1, 2:]
-    south_east, south, south_west = padded[2:, 2:], padded[2:, 1:-1], padded[2:, :-2]
-    west, north_west = padded[1:-1, :-2], padded[:-2, :-2]
-    ring = [north, north_east, east, south_east, south, south_west, west, north_west, north]
-    count = sum(ring[:8])
-    transitions = sum((ring[index] == 0) & (ring[index + 1] == 1) for index in range(8))
+def neighbor_codes(image: np.ndarray) -> np.ndarray:
+    codes = cv2.filter2D(image, cv2.CV_32F, NEIGHBOR_WEIGHTS, borderType=cv2.BORDER_CONSTANT)
+    return codes.astype(np.uint8)
+
+
+@cache
+def thinning_tables() -> tuple[np.ndarray, np.ndarray]:
+    return thinning_table(0), thinning_table(1)
+
+
+def thinning_table(step: int) -> np.ndarray:
+    return np.array([is_removable([(code >> bit) & 1 for bit in range(8)], step) for code in range(256)])
+
+
+def is_removable(ring: list[int], step: int) -> bool:
+    north, _, east, _, south, _, west, _ = ring
+    transitions = sum(ring[index] == 0 and ring[(index + 1) % 8] == 1 for index in range(8))
     if step == 0:
         first, second = north * east * south, east * south * west
     else:
         first, second = north * east * west, north * south * west
-    return (image == 1) & (count >= 2) & (count <= 6) & (transitions == 1) & (first == 0) & (second == 0)
+    return 2 <= sum(ring) <= 6 and transitions == 1 and first == 0 and second == 0
 
 
 def local_widths(mask: np.ndarray, skeleton: np.ndarray) -> np.ndarray:

@@ -8,6 +8,7 @@ export type Drawing = {
 }
 
 const LAYER_NAME_PATTERN = /^<g id="([^"]+)"/
+const DOWNLOAD_URL_LIFETIME_MS = 60_000
 
 export function layerName(markup: string): string {
   return markup.match(LAYER_NAME_PATTERN)?.[1] ?? 'layer'
@@ -27,7 +28,7 @@ export function downloadSvg(svg: string, fileName: string): void {
   link.href = url
   link.download = fileName
   link.click()
-  URL.revokeObjectURL(url)
+  window.setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_LIFETIME_MS)
 }
 
 export function svgFileName(sourceName: string): string {

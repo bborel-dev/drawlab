@@ -22,9 +22,11 @@ def raw_art_direction(direction: ArtDirection) -> dict[str, Any]:
             "description": element.description,
             "sam_prompt": element.sam_prompt,
             "kind": element.kind,
+            "outline": element.outline,
             "group": element.group,
             "center_x": element.center[0],
             "center_y": element.center[1],
+            "anchors": [{"x": x, "y": y} for x, y in element.anchors],
         }
         for element in direction.elements
     ]

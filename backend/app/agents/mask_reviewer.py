@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 import numpy as np
 from meta_sam_parser import FramePrompt, PromptBox, PromptObject, build_object_prompt
+from openai import APIError
 from PIL import Image, ImageDraw, ImageFont
 
 from app.agents.art_director import ArtDirection, Element
@@ -87,8 +88,8 @@ def check_masks(client: ModelClient, image: Image.Image, direction: ArtDirection
     try:
         fixes = review_cuts(client, image, direction, cuts)
         return MaskCheck(repair_cuts(client, image, cuts, fixes), fixes)
-    except BudgetExceededError:
-        logger.warning("budget exhausted, keeping the masks as cut")
+    except (BudgetExceededError, APIError, ValueError, KeyError) as error:
+        logger.warning("mask review skipped, keeping the masks as cut: %s", error)
         return MaskCheck(cuts, [])
 
 
@@ -112,10 +113,9 @@ def repair_cuts(client: ModelClient, image: Image.Image, cuts: list[Cut], fixes:
     records = parse_mask_records(client.segment(to_data_url(model_image), prompt))
     for record in records:
         fix = batch[int(record.object_id) - 1] if record.object_id.isdigit() else None
-        if fix and fix.element_name in repaired:
-            repaired[fix.element_name] = replace(
-                repaired[fix.element_name], prompt="box", mask=render_mask(record, model_image.size)
-            )
+        mask = render_mask(record, model_image.size)
+        if fix and fix.element_name in repaired and mask.getbbox():
+            repaired[fix.element_name] = replace(repaired[fix.element_name], prompt="box", mask=mask)
     return [repaired[cut.element_name] for cut in cuts]
 
 

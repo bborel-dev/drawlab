@@ -17,16 +17,19 @@ def fit_closed_curve(points: np.ndarray, tolerance: float) -> list[Curve]:
 def fit_cubic(points: np.ndarray, left_tangent: np.ndarray, right_tangent: np.ndarray, tolerance: float) -> list[Curve]:
     if len(points) == 2:
         return [straight_curve(points[0], points[1], left_tangent, right_tangent)]
+    arc = arc_length(points)
     parameters = chord_length_parameters(points)
-    curve = generate_curve(points, parameters, left_tangent, right_tangent)
-    error, split = max_error(points, curve, parameters)
+    basis = bernstein(parameters)
+    curve = generate_curve(points, basis, left_tangent, right_tangent, arc)
+    error, split = max_error(points, curve, basis)
     if error < tolerance:
         return [curve]
     if error < tolerance * REPARAMETERIZE_FACTOR:
         for _ in range(MAX_REPARAMETERIZE):
-            parameters = reparameterize(points, parameters, curve)
-            curve = generate_curve(points, parameters, left_tangent, right_tangent)
-            error, split = max_error(points, curve, parameters)
+            parameters = reparameterize(points, parameters, curve, basis)
+            basis = bernstein(parameters)
+            curve = generate_curve(points, basis, left_tangent, right_tangent, arc)
+            error, split = max_error(points, curve, basis)
             if error < tolerance:
                 return [curve]
     split = min(max(split, 1), len(points) - 2)
@@ -57,9 +60,12 @@ def bernstein(parameters: np.ndarray) -> np.ndarray:
     return np.stack([inverse**3, 3 * parameters * inverse**2, 3 * parameters**2 * inverse, parameters**3], axis=1)
 
 
-def generate_curve(points: np.ndarray, parameters: np.ndarray, left: np.ndarray, right: np.ndarray) -> Curve:
+def arc_length(points: np.ndarray) -> float:
+    return float(np.hypot(*np.diff(points, axis=0).T).sum())
+
+
+def generate_curve(points: np.ndarray, basis: np.ndarray, left: np.ndarray, right: np.ndarray, arc: float) -> Curve:
     start, end = points[0], points[-1]
-    basis = bernstein(parameters)
     a_left = basis[:, 1:2] * left
     a_right = basis[:, 2:3] * right
     c00 = float((a_left * a_left).sum())
@@ -75,27 +81,22 @@ def generate_curve(points: np.ndarray, parameters: np.ndarray, left: np.ndarray,
     if abs(determinant) > 1e-12:
         alpha_left = (x0 * c11 - x1 * c01) / determinant
         alpha_right = (c00 * x1 - c01 * x0) / determinant
-    arc = float(np.hypot(*np.diff(points, axis=0).T).sum())
     if min(alpha_left, alpha_right) < chord * 1e-6 or max(alpha_left, alpha_right) > arc:
         alpha_left = alpha_right = chord / 3
     return np.array([start, start + left * alpha_left, end + right * alpha_right, end])
 
 
-def evaluate(curve: Curve, parameters: np.ndarray) -> np.ndarray:
-    return bernstein(parameters) @ curve
-
-
-def max_error(points: np.ndarray, curve: Curve, parameters: np.ndarray) -> tuple[float, int]:
-    distances = np.hypot(*(evaluate(curve, parameters) - points).T)
+def max_error(points: np.ndarray, curve: Curve, basis: np.ndarray) -> tuple[float, int]:
+    distances = np.hypot(*(basis @ curve - points).T)
     split = int(distances[1:-1].argmax()) + 1
     return float(distances[split]), split
 
 
-def reparameterize(points: np.ndarray, parameters: np.ndarray, curve: Curve) -> np.ndarray:
+def reparameterize(points: np.ndarray, parameters: np.ndarray, curve: Curve, basis: np.ndarray) -> np.ndarray:
     first = 3 * np.diff(curve, axis=0)
     second = 2 * np.diff(first, axis=0)
     inverse = 1 - parameters
-    value = evaluate(curve, parameters)
+    value = basis @ curve
     derivative = (
         (inverse**2)[:, None] * first[0] + (2 * parameters * inverse)[:, None] * first[1] + (parameters**2)[:, None] * first[2]
     )

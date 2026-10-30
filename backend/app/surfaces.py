@@ -87,18 +87,23 @@ def split_contested_regions(
     contested = [region for region, claimants in claims.items() if len(claimants) > 1]
     if not contested:
         return paths, ids
-    seeds = np.zeros(ids.shape, dtype=np.int64)
-    for (row, column), surface in anchors.items():
-        seeds[row, column] = surface + 1
-    closest = fill_from_nearest(seeds[..., None], seeds > 0)[..., 0]
     split = ids.copy()
     split_paths = list(paths)
     for region in contested:
+        closest = closest_claimant(ids.shape, anchors, claims[region])
         inside = (ids == region) & free
         for surface in sorted(claims[region])[1:]:
             split_paths.append(paths[region - 1])
             split[inside & (closest == surface + 1)] = len(split_paths)
     return split_paths, split
+
+
+def closest_claimant(shape: tuple[int, ...], anchors: dict[tuple[int, int], int], claimants: set[int]) -> np.ndarray:
+    seeds = np.zeros(shape[:2], dtype=np.int64)
+    for (row, column), surface in anchors.items():
+        if surface in claimants:
+            seeds[row, column] = surface + 1
+    return fill_from_nearest(seeds[..., None], seeds > 0)[..., 0]
 
 
 def anchor_map(shape: tuple[int, ...], surfaces: list[SurfaceCenter]) -> dict[tuple[int, int], int]:

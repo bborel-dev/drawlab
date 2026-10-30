@@ -180,10 +180,11 @@ def adopt_unknown_objects(
     names: list[str],
 ) -> list[str]:
     surfaces = surface_indexes(direction, names)
-    missed = missed_object_center_paths(direction, cuts, names, ids)
+    missed = missed_object_paths(direction, cuts, names, ids)
     adopted = list(names)
     for unknown in find_unknown_objects(path_owner, unowned, path_fill_colors(paths), ids, surfaces):
-        owner = next((index for index, center_path in missed.items() if center_path in unknown.paths), None)
+        blob = set(unknown.paths.tolist())
+        owner = next((index for index, marked in missed.items() if marked & blob), None)
         if owner is None and not is_enclosed(unknown.paths, path_owner, ids):
             continue
         if owner is None:
@@ -195,15 +196,16 @@ def adopt_unknown_objects(
     return adopted
 
 
-def missed_object_center_paths(
+def missed_object_paths(
     direction: ArtDirection, cuts: list[Cut], names: list[str], ids: np.ndarray
-) -> dict[int, int]:
+) -> dict[int, set[int]]:
     cut_names = {cut.element_name for cut in cuts if cut.mask}
     height, width = ids.shape
     return {
-        names.index(element.name): int(
-            ids[min(int(element.center[1] * height), height - 1), min(int(element.center[0] * width), width - 1)]
-        )
+        names.index(element.name): {
+            int(ids[min(int(y * height), height - 1), min(int(x * width), width - 1)])
+            for x, y in element.anchors or (element.center,)
+        }
         for element in direction.elements
         if element.kind == "object" and element.name not in cut_names
     }

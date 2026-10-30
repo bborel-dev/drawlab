@@ -57,8 +57,12 @@ def snap_colors(
 def neighbors(
     pixels: np.ndarray, flat: np.ndarray, rows: np.ndarray, columns: np.ndarray
 ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    width = pixels.shape[1]
+    colors, flags = pixels.reshape(-1, pixels.shape[2]), flat.ravel()
+    index = rows * width + columns
     for dy, dx in window_offsets():
-        yield pixels[rows + dy, columns + dx], flat[rows + dy, columns + dx]
+        shifted = index + (dy * width + dx)
+        yield colors.take(shifted, axis=0), flags.take(shifted)
 
 
 def nearest_flat_neighbor(pixels: np.ndarray, flat: np.ndarray, rows: np.ndarray, columns: np.ndarray) -> np.ndarray:

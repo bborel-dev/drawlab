@@ -143,10 +143,15 @@ def clamp_fraction(value: float) -> float:
 
 
 def with_unique_names(elements: list[Element]) -> list[Element]:
-    seen: dict[str, int] = {}
+    planned = {element.name for element in elements}
+    taken: set[str] = set()
     unique: list[Element] = []
     for element in elements:
-        seen[element.name] = seen.get(element.name, 0) + 1
-        count = seen[element.name]
-        unique.append(element if count == 1 else replace(element, name=f"{element.name}-{count}"))
+        name = element.name
+        count = 1
+        while name in taken or (count > 1 and name in planned):
+            count += 1
+            name = f"{element.name}-{count}"
+        taken.add(name)
+        unique.append(element if name == element.name else replace(element, name=name))
     return unique
