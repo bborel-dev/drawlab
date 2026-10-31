@@ -115,7 +115,7 @@ def repair_cuts(client: ModelClient, image: Image.Image, cuts: list[Cut], fixes:
         fix = batch[int(record.object_id) - 1] if record.object_id.isdigit() else None
         mask = render_mask(record, model_image.size)
         if fix and fix.element_name in repaired and mask.getbbox():
-            repaired[fix.element_name] = replace(repaired[fix.element_name], prompt="box", mask=mask)
+            repaired[fix.element_name] = replace(repaired[fix.element_name], prompt="box", mask=mask, copies=())
     return [repaired[cut.element_name] for cut in cuts]
 
 

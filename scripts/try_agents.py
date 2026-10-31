@@ -13,7 +13,7 @@ import resvg_py
 from PIL import Image, ImageChops, ImageDraw, ImageStat
 
 from app.agents.art_director import ArtDirection, Element, ask_art_director, parse_art_direction
-from app.agents.cutter import Cut, cut_elements, mock_cut_elements
+from app.agents.cutter import Cut, arrange_cuts, cut_elements, mock_cut_elements
 from app.agents.mask_reviewer import check_masks
 from app.agents.illustrator import Layer, assemble_svg, draw_layers
 from app.tracing import downscale_for_tracing
@@ -34,14 +34,14 @@ def run_agents(image: Image.Image) -> tuple[ArtDirection, list[Cut], CallBudget]
     budget = CallBudget(max_calls=settings.max_api_calls_per_job)
     if settings.mock_agents:
         direction = parse_art_direction(load_art_direction())
-        return direction, list(mock_cut_elements(direction)), budget
+        return (*arrange_cuts(direction, list(mock_cut_elements(direction))), budget)
     client = ModelClient(settings, budget)
     direction = ask_art_director(client, image)
     cuts = list(cut_elements(client, image, direction))
     check = check_masks(client, image, direction, cuts)
     for fix in check.fixes:
         print(f"[reviewer] {fix.verdict} {fix.element_name} box={fix.box}")
-    return direction, check.cuts, budget
+    return (*arrange_cuts(direction, check.cuts), budget)
 
 
 def load_saved_run(output_dir: Path) -> tuple[ArtDirection, list[Cut], CallBudget]:
@@ -49,7 +49,7 @@ def load_saved_run(output_dir: Path) -> tuple[ArtDirection, list[Cut], CallBudge
     elements = [saved_element(item) for item in saved["elements"]]
     direction = ArtDirection(style=saved["style"], palette=saved["palette"], elements=elements)
     cuts = [saved_cut(output_dir / "masks", element) for element in elements if element.kind == "object"]
-    return direction, cuts, CallBudget(max_calls=0)
+    return (*arrange_cuts(direction, cuts), CallBudget(max_calls=0))
 
 
 def saved_element(item: dict) -> Element:

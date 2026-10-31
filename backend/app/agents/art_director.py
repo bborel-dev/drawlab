@@ -7,7 +7,7 @@ from PIL import Image
 from app.images import downscale_for_models, to_data_url
 from app.model_client import ModelClient
 
-MAX_ELEMENTS = 25
+MAX_ELEMENTS = 30
 MAX_ANCHORS = 4
 
 ElementKind = Literal["object", "surface"]
@@ -15,6 +15,10 @@ OutlineKind = Literal["smooth", "detailed"]
 
 ART_DIRECTOR_PROMPT = """You are the art director of a vector drawing studio.
 Break this image into the visual elements an illustrator would draw as separate layers.
+A designer will then move each main object on its own, so every distinct object is its own element,
+never merged with its neighbors: each person, animal, piece of furniture, potted plant, cup, lamp, building,
+cloud, tree or vehicle. Keep each object whole: a person with their clothes and hair, a potted plant with its pot,
+a house with its roof, door and windows.
 For each element give:
 - name: a short, unique, kebab-case layer name, such as "man-figure" or "left-potted-plant".
 - description: one sentence about its shape and color.
@@ -27,8 +31,9 @@ For each element give:
   ignoring jitter and compression noise (logos, buildings, furniture, people, clothes, hills, flat-design shapes).
   "detailed" for intricate silhouettes whose every spike, notch and tip matters
   (tree foliage, pine needles, grass, fur, hair strands, flames, splashes, lace, lettering).
-- group: true when the element is several separate copies of the same thing, such as a flock of birds,
-  scattered stars or a row of distant trees, false when it is one single thing.
+- group: true only when the element is many small copies of the same thing that the segmentation model must find
+  together, such as a flock of birds, scattered stars or a row of distant trees; each copy still becomes its own layer.
+  False when it is one single thing.
 - center_x and center_y: the approximate center of the element as fractions of the image width and height,
   from 0 (left or top) to 1 (right or bottom).
 - anchors: one to four points, in the same fractions, that land on clearly visible parts of the element,
@@ -37,7 +42,9 @@ For each element give:
 List the elements from back to front, in the order a painter would paint them: surfaces first, then objects,
 each object after every element it covers. A person sitting on a chair comes after the chair,
 and a cup on a table comes after the table.
-Use between 5 and 25 elements and prefer whole objects over tiny parts.
+Name each object after the thing itself, such as "man-figure" with the sam_prompt "man",
+never after a material or a color such as "skin".
+Use between 5 and 30 elements.
 Also give the overall style and the main palette as hex colors."""
 
 ART_DIRECTION_SCHEMA: dict[str, Any] = {

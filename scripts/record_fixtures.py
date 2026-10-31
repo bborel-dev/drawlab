@@ -7,7 +7,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 from app.agents.art_director import ArtDirection, ask_art_director
-from app.agents.cutter import cut_elements
+from app.agents.cutter import arrange_cuts, cut_elements
 from app.budget import CallBudget
 from app.config import load_settings
 from app.fixtures import FIXTURE_DIR
@@ -40,8 +40,8 @@ def main(image_path: Path) -> None:
     budget = CallBudget(max_calls=settings.max_api_calls_per_job)
     client = ModelClient(settings, budget)
     image = open_image(image_path.read_bytes())
-    direction = ask_art_director(client, image)
-    cuts = list(cut_elements(client, image, direction))
+    planned = ask_art_director(client, image)
+    direction, cuts = arrange_cuts(planned, list(cut_elements(client, image, planned)))
     masks_dir = FIXTURE_DIR / "masks"
     shutil.rmtree(masks_dir, ignore_errors=True)
     masks_dir.mkdir(parents=True)

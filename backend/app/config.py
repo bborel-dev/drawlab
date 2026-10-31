@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 DEFAULT_API_BASE_URL = "https://api.meta.ai/v1"
-DEFAULT_MAX_API_CALLS_PER_JOB = 20
+DEFAULT_MAX_API_CALLS_PER_JOB = 60
 
 
 @dataclass(frozen=True)

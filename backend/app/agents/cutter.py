@@ -1,7 +1,9 @@
+import heapq
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterator
 
+import cv2
 import numpy as np
 from meta_sam_parser import SegmentationMaskRecord
 from PIL import Image
@@ -16,6 +18,8 @@ from app.model_client import ModelClient
 logger = logging.getLogger("drawlab.cutter")
 
 SAME_INSTANCE_IOU = 0.5
+MAX_SPLIT_COPIES = 12
+NESTED_SHARE = 0.8
 
 
 @dataclass(frozen=True)
@@ -23,6 +27,7 @@ class Cut:
     element_name: str
     prompt: str
     mask: Image.Image | None
+    copies: tuple[Image.Image, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -89,9 +94,10 @@ def assign_cuts(elements: list[Element], segmented: Segmented, size: tuple[int, 
     group_elements = [element for element in elements if element.group]
     groups = split_among_groups(group_elements, instances, set(singles.values()), size)
     for element in elements:
-        owned = owned_instances(element, singles, groups)
+        masks = [instances[index].mask for index in owned_instances(element, singles, groups)]
         used_prompt = segmented.get(prompt_key(element), ([], element.sam_prompt))[1]
-        yield Cut(element.name, used_prompt, union_mask([instances[index].mask for index in owned]))
+        copies = tuple(to_mask_image(mask) for mask in masks) if element.group else ()
+        yield Cut(element.name, used_prompt, union_mask(masks), copies)
 
 
 def owned_instances(element: Element, singles: dict[str, int], groups: dict[str, list[int]]) -> list[int]:
@@ -154,9 +160,101 @@ def split_among_groups(
 
 
 def union_mask(masks: list[np.ndarray]) -> Image.Image | None:
-    if not masks:
-        return None
-    return Image.fromarray(np.logical_or.reduce(masks).astype(np.uint8) * 255)
+    return to_mask_image(np.logical_or.reduce(masks)) if masks else None
+
+
+def to_mask_image(mask: np.ndarray) -> Image.Image:
+    return Image.fromarray(mask.astype(np.uint8) * 255)
+
+
+def arrange_cuts(direction: ArtDirection, cuts: list[Cut]) -> tuple[ArtDirection, list[Cut]]:
+    split_direction, split_cuts = split_groups(direction, cuts)
+    return nest_parts(split_direction, split_cuts), split_cuts
+
+
+def nest_parts(direction: ArtDirection, cuts: list[Cut]) -> ArtDirection:
+    masks = {cut.element_name: np.asarray(cut.mask) > 127 for cut in cuts if cut.mask}
+    elements = direction.elements
+    behind: list[set[int]] = [set() for _ in elements]
+    for part_index, part in enumerate(elements):
+        for whole_index, whole in enumerate(elements):
+            if part.name in masks and whole.name in masks and contains(masks[whole.name], masks[part.name]):
+                behind[part_index].add(whole_index)
+    return replace(direction, elements=[elements[index] for index in front_to_back_order(behind)])
+
+
+def contains(whole: np.ndarray, part: np.ndarray) -> bool:
+    part_area = np.count_nonzero(part)
+    if not part_area or np.count_nonzero(whole) <= part_area:
+        return False
+    return np.count_nonzero(whole & part) >= NESTED_SHARE * part_area
+
+
+def front_to_back_order(behind: list[set[int]]) -> list[int]:
+    waiting = [len(wholes) for wholes in behind]
+    ready = [index for index, count in enumerate(waiting) if count == 0]
+    heapq.heapify(ready)
+    order: list[int] = []
+    while ready:
+        index = heapq.heappop(ready)
+        order.append(index)
+        for part_index, wholes in enumerate(behind):
+            if index in wholes:
+                waiting[part_index] -= 1
+                if waiting[part_index] == 0:
+                    heapq.heappush(ready, part_index)
+    return order
+
+
+def split_groups(direction: ArtDirection, cuts: list[Cut]) -> tuple[ArtDirection, list[Cut]]:
+    cut_by_name = {cut.element_name: cut for cut in cuts}
+    taken = {element.name for element in direction.elements}
+    elements: list[Element] = []
+    split_cuts: list[Cut] = []
+    for element in direction.elements:
+        cut = cut_by_name.get(element.name)
+        pairs = split_copies(element, cut, taken) if cut else [(element, None)]
+        elements.extend(copy_element for copy_element, _ in pairs)
+        split_cuts.extend(copy_cut for _, copy_cut in pairs if copy_cut)
+    return replace(direction, elements=elements), split_cuts
+
+
+def split_copies(element: Element, cut: Cut, taken: set[str]) -> list[tuple[Element, Cut | None]]:
+    if not 2 <= len(cut.copies) <= MAX_SPLIT_COPIES:
+        return [(element, cut)]
+    pairs: list[tuple[Element, Cut | None]] = []
+    for number, mask in enumerate(sorted(cut.copies, key=front_order), start=1):
+        name = free_name(f"{element.name}-{number}", taken)
+        taken.add(name)
+        pairs.append((copy_element(element, name, mask), Cut(name, cut.prompt, mask)))
+    return pairs
+
+
+def front_order(mask: Image.Image) -> tuple[int, int]:
+    left, _, _, bottom = mask.getbbox() or (0, 0, 0, 0)
+    return bottom, left
+
+
+def copy_element(element: Element, name: str, mask: Image.Image) -> Element:
+    width, height = mask.size
+    left, top, right, bottom = mask.getbbox() or (0, 0, width, height)
+    x, y = inner_point(mask)
+    center = ((left + right) / 2 / width, (top + bottom) / 2 / height)
+    return replace(element, name=name, group=False, center=center, anchors=((x / width, y / height),))
+
+
+def inner_point(mask: Image.Image) -> tuple[float, float]:
+    distances = cv2.distanceTransform((np.asarray(mask) > 127).astype(np.uint8), cv2.DIST_L2, 3)
+    row, column = np.unravel_index(int(distances.argmax()), distances.shape)
+    return float(column) + 0.5, float(row) + 0.5
+
+
+def free_name(base: str, taken: set[str]) -> str:
+    name, count = base, 1
+    while name in taken:
+        count += 1
+        name = f"{base}-{count}"
+    return name
 
 
 def match_cost(record: SegmentationMaskRecord, element: Element, size: tuple[int, int]) -> tuple[float, float]:

@@ -5,7 +5,7 @@ from typing import Iterator, Literal
 from PIL import Image
 
 from app.agents.art_director import ArtDirection, ask_art_director, parse_art_direction
-from app.agents.cutter import Cut, cut_elements, mock_cut_elements
+from app.agents.cutter import Cut, arrange_cuts, cut_elements, mock_cut_elements
 from app.agents.mask_reviewer import MaskFix, check_masks
 from app.agents.illustrator import draw_layers
 from app.budget import BudgetExceededError, CallBudget
@@ -62,8 +62,8 @@ def run_drawing_job(image: Image.Image, settings: Settings) -> Iterator[AgentEve
 
 
 def draw(client: ModelClient | None, image: Image.Image) -> Iterator[AgentEvent]:
-    direction = yield from direct_art(client, image)
-    cuts = yield from cut_objects(client, image, direction)
+    planned = yield from direct_art(client, image)
+    direction, cuts = yield from cut_objects(client, image, planned)
     yield from illustrate(image, direction, cuts)
 
 
@@ -75,17 +75,18 @@ def direct_art(client: ModelClient | None, image: Image.Image) -> Iterator[Agent
     return direction
 
 
-def cut_objects(client: ModelClient | None, image: Image.Image, direction: ArtDirection) -> Iterator[AgentEvent]:
+def cut_objects(client: ModelClient | None, image: Image.Image, planned: ArtDirection) -> Iterator[AgentEvent]:
     yield AgentEvent("cutter", "working", "Segmenting each object")
     if client is None:
-        cuts = list(mock_cut_elements(direction))
+        checked = list(mock_cut_elements(planned))
     else:
-        cuts = yield from cut_and_check(client, image, direction)
+        checked = yield from cut_and_check(client, image, planned)
+    direction, cuts = arrange_cuts(planned, checked)
     for cut in cuts:
         yield AgentEvent("cutter", "working", cut_message(cut), mask=outline_of(cut))
     found = sum(1 for cut in cuts if cut.mask)
     yield AgentEvent("cutter", "done", f"Found {found} of {len(cuts)} objects")
-    return cuts
+    return direction, cuts
 
 
 def cut_and_check(client: ModelClient, image: Image.Image, direction: ArtDirection) -> Iterator[AgentEvent]:
