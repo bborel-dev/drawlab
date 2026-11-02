@@ -10,8 +10,8 @@ from PIL import Image, UnidentifiedImageError
 from app.agents.edit_director import EditRequest
 from app.config import load_settings
 from app.images import open_image
-from app.pipeline import AgentEvent, run_drawing_job, run_edit_job, run_repaint_job
-from app.scene_repaint import RepaintRequest
+from app.pipeline import AgentEvent, ProposalError, run_drawing_job, run_edit_job, run_proposal_job, run_repaint_job
+from app.scene_repaint import ProposalRequest, RedrawRequest
 from app.tracing import trace_to_svg
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -23,6 +23,8 @@ MAX_PROMPT_CHARS = 500
 MAX_SVG_CHARS = 8_000_000
 MAX_EDIT_LAYERS = 200
 MAX_IMAGE_PROMPT_CHARS = 2000
+MAX_IMAGE_DATA_CHARS = 20_000_000
+MAX_CANVAS_SIDE = 8192
 
 
 @app.post("/trace")
@@ -43,18 +45,36 @@ def edit(request: EditRequest) -> dict[str, object]:
     return asdict(run_edit_job(request, load_settings()))
 
 
+@app.post("/repaint/proposal")
+def repaint_proposal(request: ProposalRequest) -> dict[str, str]:
+    check_proposal_request(request)
+    try:
+        return {"image": run_proposal_job(request, load_settings())}
+    except ProposalError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
 @app.post("/repaint")
-def repaint(request: RepaintRequest) -> StreamingResponse:
-    check_repaint_request(request)
+def repaint(request: RedrawRequest) -> StreamingResponse:
+    check_redraw_request(request)
     events = run_repaint_job(request, load_settings())
     return StreamingResponse(to_server_sent_events(events), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
-def check_repaint_request(request: RepaintRequest) -> None:
+def check_proposal_request(request: ProposalRequest) -> None:
     if not request.image_prompt.strip() or len(request.image_prompt) > MAX_IMAGE_PROMPT_CHARS:
         raise HTTPException(status_code=400, detail=f"The instruction must be 1 to {MAX_IMAGE_PROMPT_CHARS} characters")
-    if len(request.svg) > MAX_SVG_CHARS or len(request.layer_names) > MAX_EDIT_LAYERS:
+    if bool(request.svg) == bool(request.image):
+        raise HTTPException(status_code=400, detail="Send either the drawing or the proposed image")
+    if len(request.svg) > MAX_SVG_CHARS or len(request.image) > MAX_IMAGE_DATA_CHARS:
         raise HTTPException(status_code=413, detail="The drawing is too large to repaint")
+
+
+def check_redraw_request(request: RedrawRequest) -> None:
+    if len(request.image) > MAX_IMAGE_DATA_CHARS or len(request.layer_names) > MAX_EDIT_LAYERS:
+        raise HTTPException(status_code=413, detail="The drawing is too large to redraw")
+    if not (0 < request.width <= MAX_CANVAS_SIDE and 0 < request.height <= MAX_CANVAS_SIDE):
+        raise HTTPException(status_code=400, detail=f"The canvas must be at most {MAX_CANVAS_SIDE} pixels wide")
 
 
 def check_edit_request(request: EditRequest) -> None:

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { SendIcon, StopIcon } from './icons'
-import { expectedDuration, formatDuration, recordDuration, type TalkStage } from './talkTiming'
+import { expectedDuration, formatDuration, isTimed, recordDuration, type TalkStage } from './talkTiming'
 
 export type TalkAnswer = {
   reply: string
@@ -48,9 +48,8 @@ function TalkBar({ onAsk, onCancel }: TalkBarProps) {
     setProgress(message)
     const current = runRef.current
     if (!current || current.stage === stage) return
-    const now = Date.now()
-    recordDuration(current.stage, now - current.stageStartedAt)
-    changeRun({ ...current, stage, stageStartedAt: now, expectedEndAt: now + expectedDuration(stage) })
+    finishStage()
+    changeRun(nextRun(current, stage, Date.now()))
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -58,7 +57,7 @@ function TalkBar({ onAsk, onCancel }: TalkBarProps) {
     const request = prompt.trim()
     if (!request || runRef.current) return
     const startedAt = Date.now()
-    const expectedEndAt = startedAt + expectedDuration('planning') + expectedDuration('repainting')
+    const expectedEndAt = startedAt + expectedDuration('planning') + expectedDuration('proposing')
     changeRun({ startedAt, stage: 'planning', stageStartedAt: startedAt, expectedEndAt })
     setProgress(PENDING_PLACEHOLDER)
     try {
@@ -79,7 +78,7 @@ function TalkBar({ onAsk, onCancel }: TalkBarProps) {
 
   function finishStage() {
     const current = runRef.current
-    if (current) recordDuration(current.stage, Date.now() - current.stageStartedAt)
+    if (current && isTimed(current.stage)) recordDuration(current.stage, Date.now() - current.stageStartedAt)
   }
 
   return (
@@ -106,7 +105,7 @@ function TalkBar({ onAsk, onCancel }: TalkBarProps) {
           aria-label="Talk to the drawing"
           onChange={(event) => setPrompt(event.target.value)}
         />
-        {run && <TalkTimer run={run} />}
+        {run && isTimed(run.stage) && <TalkTimer run={run} />}
         {pending ? (
           <button
             key="cancel"
@@ -139,6 +138,12 @@ function TalkTimer({ run }: { run: TalkRun }) {
       </span>
     </span>
   )
+}
+
+function nextRun(current: TalkRun, stage: TalkStage, now: number): TalkRun {
+  if (!isTimed(stage)) return { ...current, stage, stageStartedAt: now }
+  const startedAt = current.stage === 'reviewing' ? now : current.startedAt
+  return { startedAt, stage, stageStartedAt: now, expectedEndAt: now + expectedDuration(stage) }
 }
 
 function useNow(): number {

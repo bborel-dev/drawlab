@@ -5,7 +5,7 @@ from typing import Any, Literal
 from PIL import Image
 
 from app.images import downscale_for_models, to_data_url
-from app.model_client import ModelClient
+from app.model_client import ModelClient, ReasoningEffort
 
 MAX_ELEMENTS = 30
 MAX_ANCHORS = 4
@@ -115,10 +115,15 @@ class ArtDirection:
     elements: list[Element]
 
 
-def ask_art_director(client: ModelClient, image: Image.Image, previous_names: list[str] | None = None) -> ArtDirection:
+def ask_art_director(
+    client: ModelClient,
+    image: Image.Image,
+    previous_names: list[str] | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
+) -> ArtDirection:
     image_url = to_data_url(downscale_for_models(image))
     prompt = ART_DIRECTOR_PROMPT + previous_names_hint(previous_names or [])
-    raw = client.ask_for_json(prompt, [image_url], "ArtDirection", ART_DIRECTION_SCHEMA)
+    raw = client.ask_for_json(prompt, [image_url], "ArtDirection", ART_DIRECTION_SCHEMA, reasoning_effort)
     return parse_art_direction(raw)
 
 

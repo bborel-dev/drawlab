@@ -1,6 +1,7 @@
 import logging
+import time
 from dataclasses import dataclass
-from typing import Iterator, Literal
+from typing import Generator, Iterator, Literal, TypeVar
 
 from openai import APIError
 from PIL import Image
@@ -9,20 +10,22 @@ from app.agents.art_director import ArtDirection, ask_art_director, parse_art_di
 from app.agents.completer import Completion, Occlusion, complete_objects, find_occlusions
 from app.agents.cutter import Cut, arrange_cuts, cut_elements, mock_cut_elements
 from app.agents.edit_director import EditPlan, EditRequest, mock_plan_edits, plan_edits
-from app.scene_repaint import RepaintRequest, repainted_scene
+from app.scene_repaint import ProposalRequest, RedrawRequest, accepted_scene, proposed_scene
 from app.agents.mask_reviewer import MaskFix, check_masks
 from app.agents.illustrator import BACKGROUND_COLOR_LAYER, draw_layers
 from app.budget import BudgetExceededError, CallBudget
 from app.config import Settings
 from app.fixtures import load_art_direction
+from app.images import to_data_url
 from app.masks import mask_outline
-from app.model_client import ModelClient
+from app.model_client import ModelClient, ReasoningEffort
 from app.tracing import downscale_for_tracing
 
 logger = logging.getLogger("drawlab.pipeline")
 
 AgentName = Literal["art-director", "cutter", "completer", "illustrator"]
 AgentStatus = Literal["working", "done", "error"]
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,18 @@ class AgentEvent:
     layer: str | None = None
     canvas: Canvas | None = None
     mask: MaskOutline | None = None
+
+
+@dataclass(frozen=True)
+class DrawOptions:
+    previous_names: list[str] | None = None
+    review_masks: bool = True
+    complete_hidden_parts: bool = True
+    planning_effort: ReasoningEffort | None = None
+
+
+class ProposalError(RuntimeError):
+    pass
 
 
 def run_drawing_job(image: Image.Image, settings: Settings) -> Iterator[AgentEvent]:
@@ -78,18 +93,31 @@ def run_edit_job(request: EditRequest, settings: Settings) -> EditPlan:
         logger.info("edit finished calls=%d cost=$%.4f", budget.calls, budget.cost_usd)
 
 
-def run_repaint_job(request: RepaintRequest, settings: Settings) -> Iterator[AgentEvent]:
+def run_proposal_job(request: ProposalRequest, settings: Settings) -> str:
+    if settings.mock_agents:
+        raise ProposalError("Repainting needs the real models, set MOCK_AGENTS=false")
+    budget = CallBudget(max_calls=settings.max_api_calls_per_job)
+    started = time.monotonic()
+    try:
+        return to_data_url(proposed_scene(ModelClient(settings, budget), request))
+    except (BudgetExceededError, APIError, ValueError) as error:
+        logger.exception("proposal job failed")
+        raise ProposalError("Muse Image could not repaint the scene, please try again") from error
+    finally:
+        log_duration("proposal", started)
+        logger.info("proposal finished calls=%d cost=$%.4f", budget.calls, budget.cost_usd)
+
+
+def run_repaint_job(request: RedrawRequest, settings: Settings) -> Iterator[AgentEvent]:
     if settings.mock_agents:
         yield AgentEvent("art-director", "error", "Repainting needs the real models, set MOCK_AGENTS=false")
         return
     budget = CallBudget(max_calls=settings.max_api_calls_per_job)
     client = ModelClient(settings, budget)
     current_agent: AgentName = "art-director"
+    names = [name for name in request.layer_names if name != BACKGROUND_COLOR_LAYER]
     try:
-        yield AgentEvent("art-director", "working", "Muse Image is repainting the whole scene")
-        edited = repainted_scene(client, request)
-        names = [name for name in request.layer_names if name != BACKGROUND_COLOR_LAYER]
-        for event in draw(client, edited, names):
+        for event in draw(client, accepted_scene(request), redraw_options(names)):
             current_agent = event.agent
             yield event
     except BudgetExceededError as error:
@@ -100,34 +128,51 @@ def run_repaint_job(request: RepaintRequest, settings: Settings) -> Iterator[Age
     logger.info("repaint finished calls=%d cost=$%.4f", budget.calls, budget.cost_usd)
 
 
-def draw(
-    client: ModelClient | None, image: Image.Image, previous_names: list[str] | None = None
-) -> Iterator[AgentEvent]:
-    planned = yield from direct_art(client, image, previous_names)
-    direction, cuts = yield from cut_objects(client, image, planned)
-    completions = yield from complete_hidden(client, image, direction, cuts)
-    yield from illustrate(image, direction, cuts, completions)
+def redraw_options(previous_names: list[str]) -> DrawOptions:
+    return DrawOptions(previous_names, review_masks=False, complete_hidden_parts=False, planning_effort="low")
 
 
-def direct_art(
-    client: ModelClient | None, image: Image.Image, previous_names: list[str] | None
-) -> Iterator[AgentEvent]:
+def draw(client: ModelClient | None, image: Image.Image, options: DrawOptions = DrawOptions()) -> Iterator[AgentEvent]:
+    planned = yield from timed("art-director", direct_art(client, image, options))
+    direction, cuts = yield from timed("cutter", cut_objects(client, image, planned, options.review_masks))
+    completions: list[Completion] = []
+    if options.complete_hidden_parts:
+        completions = yield from timed("completer", complete_hidden(client, image, direction, cuts))
+    yield from timed("illustrator", illustrate(image, direction, cuts, completions))
+
+
+def timed(stage: str, events: Generator[AgentEvent, None, T]) -> Generator[AgentEvent, None, T]:
+    started = time.monotonic()
+    result = yield from events
+    log_duration(stage, started)
+    return result
+
+
+def log_duration(stage: str, started: float) -> None:
+    logger.info("stage=%s seconds=%.1f", stage, time.monotonic() - started)
+
+
+def direct_art(client: ModelClient | None, image: Image.Image, options: DrawOptions) -> Iterator[AgentEvent]:
     yield AgentEvent("art-director", "working", "Studying the image")
     if client is None:
         direction = parse_art_direction(load_art_direction())
     else:
-        direction = ask_art_director(client, image, previous_names)
+        direction = ask_art_director(client, image, options.previous_names, options.planning_effort)
     names = ", ".join(element.name for element in direction.elements)
     yield AgentEvent("art-director", "done", f"Planned {len(direction.elements)} elements: {names}")
     return direction
 
 
-def cut_objects(client: ModelClient | None, image: Image.Image, planned: ArtDirection) -> Iterator[AgentEvent]:
+def cut_objects(
+    client: ModelClient | None, image: Image.Image, planned: ArtDirection, review_masks: bool
+) -> Iterator[AgentEvent]:
     yield AgentEvent("cutter", "working", "Segmenting each object")
     if client is None:
         checked = list(mock_cut_elements(planned))
-    else:
+    elif review_masks:
         checked = yield from cut_and_check(client, image, planned)
+    else:
+        checked = list(cut_elements(client, image, planned))
     direction, cuts = arrange_cuts(planned, checked)
     for cut in cuts:
         yield AgentEvent("cutter", "working", cut_message(cut), mask=outline_of(cut))

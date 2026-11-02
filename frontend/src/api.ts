@@ -35,9 +35,12 @@ export type EditRequest = {
 const EVENT_SEPARATOR = '\n\n'
 const DATA_PREFIX = 'data: '
 
-export type RepaintRequest = {
-  svg: string
-  image_prompt: string
+export type ProposalRequest = { image_prompt: string } & ({ svg: string } | { image: string })
+
+export type RedrawRequest = {
+  image: string
+  width: number
+  height: number
   layer_names: string[]
 }
 
@@ -52,8 +55,19 @@ export async function streamDrawing(
   await readEvents(response, onEvent)
 }
 
+export async function requestProposal(body: ProposalRequest, signal: AbortSignal): Promise<string> {
+  const response = await fetch('/api/repaint/proposal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!response.ok) throw new Error(`Repaint proposal failed (${response.status})`)
+  return ((await response.json()) as { image: string }).image
+}
+
 export async function streamRepaint(
-  body: RepaintRequest,
+  body: RedrawRequest,
   onEvent: (event: AgentEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {

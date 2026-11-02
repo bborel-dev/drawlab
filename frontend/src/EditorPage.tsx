@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { requestEdit, streamRepaint } from './api'
+import { requestEdit, requestProposal, streamRepaint } from './api'
+import ConfirmDialog from './ConfirmDialog'
 import { applyEditPlan, changedLayers, shownLayers, summarizeLayers, type EditPlan } from './drawingEdits'
 import EditorCanvas, { type Redraw } from './EditorCanvas'
 import {
@@ -23,6 +24,7 @@ import { BackIcon, RedoIcon, UndoIcon } from './icons'
 import { downloadSvg, svgFileName, type Drawing } from './layers'
 import LayersPanel from './LayersPanel'
 import PropertiesPanel from './PropertiesPanel'
+import RepaintProposal, { type Proposal, type ProposalChoice } from './RepaintProposal'
 import TalkBar, { type TalkAnswer, type TalkProgress } from './TalkBar'
 import { useHistory, useUndoShortcuts } from './useHistory'
 import ZoomControl from './ZoomControl'
@@ -38,7 +40,15 @@ type EditorPageProps = {
   onBack: () => void
 }
 
+type OpenProposal = Proposal & {
+  svg: string
+  choose: (choice: ProposalChoice) => void
+}
+
 const AUTOSAVE_DELAY_MS = 800
+const DISCARDED_REPLY = 'The new scene was discarded, the drawing is unchanged.'
+const LEAVE_WHILE_EDITING = 'Muse is still working on your edit. Leaving now cancels it and keeps the drawing as it was.'
+const LEAVE_WHEN_SAVED = 'Your drawing is saved in this browser. You can reopen it anytime from your drawings.'
 
 function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPageProps) {
   const history = useHistory(() => withBackgroundLayer(parseLayers(drawing.layers), drawing.canvas))
@@ -46,10 +56,14 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [view, setView] = useState<View>(FIT_VIEW)
   const [redraw, setRedraw] = useState<Redraw | null>(null)
+  const [proposal, setProposal] = useState<OpenProposal | null>(null)
+  const [canvasLocked, setCanvasLocked] = useState(false)
+  const [talkRunning, setTalkRunning] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const editRequest = useRef<AbortController | null>(null)
   const redrawCount = useRef(0)
   const selected = layers.find((layer) => layer.id === selectedId) ?? null
-  useUndoShortcuts(active, undo, redo)
+  useUndoShortcuts(active && !canvasLocked, undo, redo)
   useAutosave(layers, drawingId, onSave)
   useEffect(() => () => editRequest.current?.abort(), [])
 
@@ -83,6 +97,15 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
   }
 
   async function talkToDrawing(prompt: string, onProgress: (progress: TalkProgress) => void): Promise<TalkAnswer> {
+    setTalkRunning(true)
+    try {
+      return await runTalk(prompt, onProgress)
+    } finally {
+      setTalkRunning(false)
+    }
+  }
+
+  async function runTalk(prompt: string, onProgress: (progress: TalkProgress) => void): Promise<TalkAnswer> {
     editRequest.current?.abort()
     const controller = new AbortController()
     editRequest.current = controller
@@ -105,24 +128,80 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
     onProgress: (progress: TalkProgress) => void,
     signal: AbortSignal,
   ): Promise<TalkAnswer> {
+    try {
+      const image = await chooseProposal(plan, svg, onProgress, signal)
+      if (!image) return { reply: DISCARDED_REPLY, changed: [] }
+      setProposal(null)
+      return await drawScene(image, plan.reply, onProgress, signal)
+    } finally {
+      setProposal(null)
+    }
+  }
+
+  async function chooseProposal(
+    plan: EditPlan,
+    svg: string,
+    onProgress: (progress: TalkProgress) => void,
+    signal: AbortSignal,
+  ): Promise<string | null> {
+    onProgress({ stage: 'proposing', message: 'Muse Image is repainting the scene…' })
+    let image = await requestProposal({ svg, image_prompt: plan.image_prompt }, signal)
+    let reply = plan.reply
+    for (;;) {
+      onProgress({ stage: 'reviewing', message: 'Review the new scene, then draw it or retouch it' })
+      const choice = await askChoice({ image, reply, busy: false }, svg, signal)
+      if (choice.kind === 'accept') return image
+      if (choice.kind === 'discard') return null
+      setProposal((current) => current && { ...current, busy: true })
+      onProgress({ stage: 'proposing', message: 'Muse Image is retouching the scene…' })
+      image = await requestProposal({ image, image_prompt: choice.instruction }, signal)
+      reply = `Retouched: ${choice.instruction}`
+    }
+  }
+
+  function askChoice(proposal: Proposal, svg: string, signal: AbortSignal): Promise<ProposalChoice> {
+    return new Promise((resolve, reject) => {
+      const abort = () => reject(new DOMException('The request was cancelled', 'AbortError'))
+      if (signal.aborted) return abort()
+      signal.addEventListener('abort', abort, { once: true })
+      const choose = (choice: ProposalChoice) => {
+        signal.removeEventListener('abort', abort)
+        resolve(choice)
+      }
+      setProposal({ ...proposal, svg, choose })
+    })
+  }
+
+  async function drawScene(
+    image: string,
+    reply: string,
+    onProgress: (progress: TalkProgress) => void,
+    signal: AbortSignal,
+  ): Promise<TalkAnswer> {
     const markups: string[] = []
     let failure: string | null = null
-    onProgress({ stage: 'repainting', message: plan.reply })
-    await streamRepaint(
-      { svg, image_prompt: plan.image_prompt, layer_names: layers.map((layer) => layer.id) },
-      (event) => {
-        if (event.layer) markups.push(event.layer)
-        if (event.status === 'error') failure = event.message
-        else onProgress({ stage: 'repainting', message: event.message })
-      },
-      signal,
-    )
+    onProgress({ stage: 'drawing', message: 'Drawing the new scene' })
+    setSelectedId(null)
+    setCanvasLocked(true)
+    try {
+      await streamRepaint(
+        { image, ...drawing.canvas, layer_names: layers.map((layer) => layer.id) },
+        (event) => {
+          if (event.layer) markups.push(event.layer)
+          if (event.status === 'error') failure = event.message
+          else onProgress({ stage: 'drawing', message: event.message })
+        },
+        signal,
+      )
+    } finally {
+      setCanvasLocked(false)
+    }
     if (failure || markups.length === 0) return { reply: failure ?? 'The scene could not be redrawn.', changed: [] }
     const redrawn = withBackgroundLayer(parseLayers(markups), drawing.canvas)
     update(() => redrawn)
     setSelectedId(null)
     setRedraw({ ids: redrawn.map((layer) => layer.id), key: ++redrawCount.current })
-    return { reply: plan.reply, changed: [`all ${redrawn.length} layers redrawn`] }
+    return { reply, changed: [`all ${redrawn.length} layers redrawn`] }
   }
 
   function cancelTalk() {
@@ -140,7 +219,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
           <button
             type="button"
             className="back-button"
-            onClick={onBack}
+            onClick={() => setLeaving(true)}
             aria-label="Back to your drawings"
             title="Back to your drawings"
           >
@@ -159,7 +238,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
             <button
               type="button"
               className="icon-switch"
-              disabled={!history.canUndo}
+              disabled={canvasLocked || !history.canUndo}
               onClick={undo}
               aria-label="Undo"
               title="Undo (Ctrl+Z)"
@@ -169,7 +248,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
             <button
               type="button"
               className="icon-switch"
-              disabled={!history.canRedo}
+              disabled={canvasLocked || !history.canRedo}
               onClick={redo}
               aria-label="Redo"
               title="Redo (Ctrl+Shift+Z)"
@@ -188,7 +267,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
         </button>
       </div>
 
-      <div className="editor-workspace">
+      <div className="editor-workspace" inert={canvasLocked}>
         <LayersPanel
           layers={layers}
           selectedId={selectedId}
@@ -204,6 +283,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
           selectedId={selectedId}
           view={view}
           redraw={redraw}
+          locked={canvasLocked}
           onSelect={setSelectedId}
           onMove={(id, x, y) => changeLayer(id, { x, y }, 'move')}
           onDelete={remove}
@@ -222,6 +302,17 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
       </div>
 
       <TalkBar onAsk={talkToDrawing} onCancel={cancelTalk} />
+      {proposal && <RepaintProposal proposal={proposal} currentSvg={proposal.svg} onChoose={proposal.choose} />}
+      {leaving && (
+        <ConfirmDialog
+          title="Back to your drawings?"
+          message={talkRunning ? LEAVE_WHILE_EDITING : LEAVE_WHEN_SAVED}
+          confirmLabel={talkRunning ? 'Cancel the edit and leave' : 'Leave'}
+          cancelLabel="Stay"
+          onConfirm={onBack}
+          onCancel={() => setLeaving(false)}
+        />
+      )}
     </main>
   )
 }

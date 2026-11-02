@@ -1,7 +1,7 @@
 import base64
 import io
 import json
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 from openai import OpenAI
 from PIL import Image
@@ -17,6 +17,8 @@ SPARK_OUTPUT_USD_PER_TOKEN = 4.25 / 1_000_000
 SAM_USD_PER_IMAGE = 2.50 / 1_000
 IMAGE_USD_PER_IMAGE = 0.01
 
+ReasoningEffort = Literal["minimal", "low", "medium", "high"]
+
 
 class ModelClient:
     def __init__(self, settings: Settings, budget: CallBudget) -> None:
@@ -24,10 +26,16 @@ class ModelClient:
         self._budget = budget
 
     def ask_for_json(
-        self, prompt: str, image_urls: list[str], schema_name: str, schema: dict[str, Any]
+        self,
+        prompt: str,
+        image_urls: list[str],
+        schema_name: str,
+        schema: dict[str, Any],
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> dict[str, Any]:
         self._budget.reserve()
         images = [{"type": "image_url", "image_url": {"url": image_url}} for image_url in image_urls]
+        effort = {"reasoning_effort": reasoning_effort} if reasoning_effort else {}
         response = self._client.chat.completions.create(
             model=SPARK_MODEL,
             messages=[{"role": "user", "content": [{"type": "text", "text": prompt}, *images]}],
@@ -35,6 +43,7 @@ class ModelClient:
                 "type": "json_schema",
                 "json_schema": {"name": schema_name, "strict": True, "schema": schema},
             },
+            **effort,
         )
         self._record_spark_usage(response.usage)
         return json.loads(response.choices[0].message.content or "{}")

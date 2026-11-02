@@ -1,5 +1,6 @@
 import heapq
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from typing import Iterator
 
@@ -17,6 +18,7 @@ from app.model_client import ModelClient
 
 logger = logging.getLogger("drawlab.cutter")
 
+PARALLEL_SEGMENTS = 6
 SAME_INSTANCE_IOU = 0.5
 MAX_SPLIT_COPIES = 12
 NESTED_SHARE = 0.8
@@ -57,12 +59,17 @@ def object_elements(direction: ArtDirection) -> list[Element]:
 
 
 def segment_prompts(client: ModelClient, image_url: str, elements: list[Element]) -> Segmented:
+    with ThreadPoolExecutor(max_workers=PARALLEL_SEGMENTS) as pool:
+        futures = {
+            prompt: pool.submit(segment_with_fallback, client, image_url, prompt)
+            for prompt in group_by_prompt(elements)
+        }
     segmented: Segmented = {}
-    try:
-        for prompt in group_by_prompt(elements):
-            segmented[prompt] = segment_with_fallback(client, image_url, prompt)
-    except BudgetExceededError:
-        logger.warning("budget exhausted, keeping the masks cut so far")
+    for prompt, future in futures.items():
+        try:
+            segmented[prompt] = future.result()
+        except BudgetExceededError:
+            logger.warning("budget exhausted, skipping the prompt %s", prompt)
     return segmented
 
 

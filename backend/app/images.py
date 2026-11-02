@@ -36,3 +36,8 @@ def to_png_bytes(image: Image.Image) -> bytes:
 
 def to_data_url(image: Image.Image) -> str:
     return "data:image/png;base64," + base64.b64encode(to_png_bytes(image)).decode("ascii")
+
+
+def from_data_url(data_url: str) -> Image.Image:
+    _, _, encoded = data_url.partition(",")
+    return open_image(base64.b64decode(encoded, validate=True))

@@ -4,13 +4,14 @@ import type { CompareView } from './ViewSwitch'
 type CompareFrameProps = {
   sourceUrl: string
   sourceFormat: string
+  resultFormat?: string
   view: CompareView | null
   children: ReactNode
 }
 
 const INITIAL_SPLIT = 50
 
-function CompareFrame({ sourceUrl, sourceFormat, view, children }: CompareFrameProps) {
+function CompareFrame({ sourceUrl, sourceFormat, resultFormat = 'SVG', view, children }: CompareFrameProps) {
   const [split, setSplit] = useState(INITIAL_SPLIT)
   const beforeClip = view === 'compare' ? `inset(0 ${100 - split}% 0 0)` : 'none'
   const showsBefore = view === 'before' || view === 'compare'
@@ -48,7 +49,7 @@ function CompareFrame({ sourceUrl, sourceFormat, view, children }: CompareFrameP
         </>
       )}
       {showsBefore && <span className="frame-tag frame-tag-left">Before · {sourceFormat}</span>}
-      {(view === 'compare' || view === 'after') && <span className="frame-tag frame-tag-right">After · SVG</span>}
+      {(view === 'compare' || view === 'after') && <span className="frame-tag frame-tag-right">After · {resultFormat}</span>}
     </figure>
   )
 }

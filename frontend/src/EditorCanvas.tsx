@@ -17,6 +17,7 @@ type EditorCanvasProps = {
   selectedId: string | null
   view: View
   redraw: Redraw | null
+  locked: boolean
   onSelect: (id: string | null) => void
   onMove: (id: string, x: number, y: number) => void
   onDelete: (id: string) => void
@@ -50,6 +51,7 @@ function EditorCanvas({
   selectedId,
   view,
   redraw,
+  locked,
   onSelect,
   onMove,
   onDelete,
@@ -101,10 +103,11 @@ function EditorCanvas({
   return (
     <div
       ref={stageRef}
-      className="editor-stage"
+      className={locked ? 'editor-stage editor-stage-locked' : 'editor-stage'}
       tabIndex={0}
       aria-label="Canvas. Drag a layer to move it, use the arrow keys to nudge it, pinch to zoom, scroll to pan."
-      onKeyDown={nudge}
+      aria-busy={locked}
+      onKeyDown={locked ? undefined : nudge}
       onPointerDown={(event) => event.target === event.currentTarget && onSelect(null)}
     >
       <svg
