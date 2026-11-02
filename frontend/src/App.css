@@ -228,6 +228,31 @@
   gap: 6px;
 }
 
+.header-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.repo-link {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--color-text);
+  transition: background 0.15s;
+}
+
+.repo-link:hover {
+  background: rgb(255 255 255 / 45%);
+}
+
+.repo-link:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
 .nav-item {
   padding: 8px 14px;
   border-radius: 999px;
