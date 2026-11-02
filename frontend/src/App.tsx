@@ -46,7 +46,7 @@ function App() {
   }
 
   return (
-    <div className={editing ? 'app app-fixed' : 'app'}>
+    <div className={page === 'editor' ? 'app app-fixed' : 'app'}>
       <Backdrop />
       {!editing && (
         <>
