@@ -24,7 +24,10 @@ def render_drawing(svg: str) -> Image.Image:
 
 
 def repainted_scene(client: ModelClient, request: RepaintRequest) -> Image.Image:
-    drawing = render_drawing(request.svg)
-    sent = drawing.copy()
+    return edited_image(client, render_drawing(request.svg), request.image_prompt)
+
+
+def edited_image(client: ModelClient, image: Image.Image, prompt: str) -> Image.Image:
+    sent = image.copy()
     sent.thumbnail((MAX_IMAGE_EDIT_SIDE, MAX_IMAGE_EDIT_SIDE))
-    return client.edit_image(sent, request.image_prompt).resize(drawing.size, Image.Resampling.LANCZOS)
+    return client.edit_image(sent, prompt).resize(image.size, Image.Resampling.LANCZOS)

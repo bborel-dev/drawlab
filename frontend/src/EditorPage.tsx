@@ -23,7 +23,7 @@ import { BackIcon, RedoIcon, UndoIcon } from './icons'
 import { downloadSvg, svgFileName, type Drawing } from './layers'
 import LayersPanel from './LayersPanel'
 import PropertiesPanel from './PropertiesPanel'
-import TalkBar, { type TalkAnswer } from './TalkBar'
+import TalkBar, { type TalkAnswer, type TalkProgress } from './TalkBar'
 import { useHistory, useUndoShortcuts } from './useHistory'
 import ZoomControl from './ZoomControl'
 import { FIT_VIEW, zoomAround, type View } from './zoom'
@@ -82,7 +82,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
     if (selectedId === id) setSelectedId(null)
   }
 
-  async function talkToDrawing(prompt: string, onProgress: (message: string) => void): Promise<TalkAnswer> {
+  async function talkToDrawing(prompt: string, onProgress: (progress: TalkProgress) => void): Promise<TalkAnswer> {
     editRequest.current?.abort()
     const controller = new AbortController()
     editRequest.current = controller
@@ -102,18 +102,18 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
   async function repaint(
     plan: EditPlan,
     svg: string,
-    onProgress: (message: string) => void,
+    onProgress: (progress: TalkProgress) => void,
     signal: AbortSignal,
   ): Promise<TalkAnswer> {
     const markups: string[] = []
     let failure: string | null = null
-    onProgress(plan.reply)
+    onProgress({ stage: 'repainting', message: plan.reply })
     await streamRepaint(
       { svg, image_prompt: plan.image_prompt, layer_names: layers.map((layer) => layer.id) },
       (event) => {
         if (event.layer) markups.push(event.layer)
         if (event.status === 'error') failure = event.message
-        else onProgress(event.message)
+        else onProgress({ stage: 'repainting', message: event.message })
       },
       signal,
     )
@@ -123,6 +123,10 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
     setSelectedId(null)
     setRedraw({ ids: redrawn.map((layer) => layer.id), key: ++redrawCount.current })
     return { reply: plan.reply, changed: [`all ${redrawn.length} layers redrawn`] }
+  }
+
+  function cancelTalk() {
+    editRequest.current?.abort()
   }
 
   function exportSvg() {
@@ -217,7 +221,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
         />
       </div>
 
-      <TalkBar onAsk={talkToDrawing} />
+      <TalkBar onAsk={talkToDrawing} onCancel={cancelTalk} />
     </main>
   )
 }

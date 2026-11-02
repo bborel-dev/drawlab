@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 
 from app.agents.art_director import ArtDirection
+from app.agents.completer import Completion
 from app.agents.cutter import Cut
 from app.edge_blends import snap_edge_blends
 from app.id_map import (
@@ -46,7 +47,7 @@ from app.tracing import (
     trace_paths,
 )
 from app.surfaces import attach_object_fragments, grow_surfaces, split_contested_regions
-from app.underpaint import layer_sources, source_paths, trace_underpaint, underpaint_regions
+from app.underpaint import layer_sources, source_paths, trace_revealed, trace_underpaint, underpaint_regions
 from app.unknown_objects import color_name, find_unknown_objects, is_enclosed, surface_tone_map
 
 BACKGROUND_LAYER = "background"
@@ -68,7 +69,9 @@ class LayerPart:
     offset: tuple[int, int]
 
 
-def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) -> Iterator[Layer]:
+def draw_layers(
+    image: Image.Image, direction: ArtDirection, cuts: list[Cut], completions: list[Completion] | None = None
+) -> Iterator[Layer]:
     trace_image = downscale_for_tracing(image)
     reach = ink_reach(trace_image)
     ink = find_ink(trace_image, reach)
@@ -100,6 +103,7 @@ def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) ->
     underpaints = trace_underpaints(
         rendered, pixel_owner, path_owner, paths, ids, surface_indexes(direction, names), len(names)
     )
+    underpaints.update(trace_completions(completions or [], names, pixel_owner))
     for index, name in enumerate(names):
         gap_patch = trace_gap_patch(rendered, gaps & (pixel_owner == index))
         color = color_part(color_paths[index], gap_patch, underpaints.get(index))
@@ -247,6 +251,21 @@ def trace_underpaints(
         layer: trace_underpaint(rendered, pixel_owner, sources, layer, region)
         for layer, region in underpaint_regions(pixel_owner, sources, surfaces, layer_count).items()
     }
+
+
+def trace_completions(completions: list[Completion], names: list[str], pixel_owner: np.ndarray) -> dict[int, str]:
+    size = (pixel_owner.shape[1], pixel_owner.shape[0])
+    traced: dict[int, str] = {}
+    for completion in completions:
+        if completion.name not in names:
+            continue
+        layer = names.index(completion.name)
+        revealed = np.asarray(completion.image.resize(size, Image.Resampling.LANCZOS))
+        shape = np.asarray(Image.fromarray(completion.shape).resize(size, Image.Resampling.NEAREST))
+        markup = trace_revealed(revealed, shape, pixel_owner, layer)
+        if markup:
+            traced[layer] = markup
+    return traced
 
 
 def surface_indexes(direction: ArtDirection, names: list[str]) -> list[int]:

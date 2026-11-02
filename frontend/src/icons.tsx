@@ -58,19 +58,28 @@ export function RedoIcon() {
   )
 }
 
+export function SendIcon() {
+  return (
+    <Icon>
+      <path d="M8 13 V3" />
+      <path d="M4 7 L8 3 L12 7" />
+    </Icon>
+  )
+}
+
+export function StopIcon() {
+  return (
+    <Icon>
+      <rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor" />
+    </Icon>
+  )
+}
+
 export function BackIcon() {
   return (
     <Icon>
       <path d="M13 8 H3" />
       <path d="M7 4 L3 8 L7 12" />
-    </Icon>
-  )
-}
-
-export function SparkleIcon() {
-  return (
-    <Icon>
-      <path d="M8 1.5 C8.5 5 11 7.5 14.5 8 C11 8.5 8.5 11 8 14.5 C7.5 11 5 8.5 1.5 8 C5 7.5 7.5 5 8 1.5 Z" />
     </Icon>
   )
 }

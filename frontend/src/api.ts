@@ -1,6 +1,6 @@
 import type { EditPlan, LayerSummary } from './drawingEdits'
 
-export type AgentName = 'art-director' | 'cutter' | 'illustrator'
+export type AgentName = 'art-director' | 'cutter' | 'completer' | 'illustrator'
 
 export type AgentStatus = 'working' | 'done' | 'error'
 

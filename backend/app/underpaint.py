@@ -94,10 +94,31 @@ def trace_underpaint(
     source = sources == layer
     if not region.any() or not source.any():
         return None
-    grown = cv2.dilate(region.astype(np.uint8), overlap_kernel()).astype(bool) & (region | (pixel_owner == layer))
+    return trace_region(fill_from_nearest(rendered, source), grown_region(region, pixel_owner, layer))
+
+
+def trace_revealed(revealed: np.ndarray, shape: np.ndarray, pixel_owner: np.ndarray, layer: int) -> str | None:
+    region = without_crumbs(shape & (pixel_owner > layer))
+    if not region.any():
+        return None
+    return trace_region(revealed, grown_region(region, pixel_owner, layer))
+
+
+def without_crumbs(region: np.ndarray) -> np.ndarray:
+    _, parts, stats, _ = cv2.connectedComponentsWithStats(region.astype(np.uint8))
+    kept = stats[:, cv2.CC_STAT_AREA] >= MIN_HIDDEN_SHARE * region.size
+    kept[0] = False
+    return kept[parts]
+
+
+def grown_region(region: np.ndarray, pixel_owner: np.ndarray, layer: int) -> np.ndarray:
+    return cv2.dilate(region.astype(np.uint8), overlap_kernel()).astype(bool) & (region | (pixel_owner == layer))
+
+
+def trace_region(color_source: np.ndarray, grown: np.ndarray) -> str | None:
     left, top, right, bottom = Image.fromarray(grown.astype(np.uint8) * 255).getbbox()
     window = (slice(top, bottom), slice(left, right))
-    colors = fill_from_nearest(rendered, source)[window]
+    colors = color_source[window]
     alpha = grown[window]
     cut = np.where(alpha[..., None], np.dstack([colors, alpha.astype(np.uint8) * 255]), 0).astype(np.uint8)
     paths = trace_paths(Image.fromarray(cut, "RGBA"))

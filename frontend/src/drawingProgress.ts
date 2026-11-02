@@ -20,7 +20,8 @@ type ProgressInput = {
 
 const PLANNING_SHARE = 0.1
 const CUTTING_SHARE = 0.2
-const DRAWING_SHARE = 1 - PLANNING_SHARE - CUTTING_SHARE
+const COMPLETING_SHARE = 0.15
+const DRAWING_SHARE = 1 - PLANNING_SHARE - CUTTING_SHARE - COMPLETING_SHARE
 
 export function drawingProgress(input: ProgressInput): DrawingProgress {
   return {
@@ -47,8 +48,9 @@ function layerDetail({ startedLayers, totalLayers, streamDone }: ProgressInput):
 function overallProgress({ states, startedLayers, totalLayers, streamDone }: ProgressInput): number {
   const planned = isDone(states['art-director']) ? PLANNING_SHARE : 0
   const cut = isDone(states.cutter) ? CUTTING_SHARE : 0
+  const completed = isDone(states.completer) ? COMPLETING_SHARE : 0
   const expectedLayers = streamDone ? totalLayers : totalLayers + 1
-  return planned + cut + DRAWING_SHARE * (startedLayers / Math.max(expectedLayers, 1))
+  return planned + cut + completed + DRAWING_SHARE * (startedLayers / Math.max(expectedLayers, 1))
 }
 
 function stepState(

@@ -1,4 +1,4 @@
-const MODELS = ['Muse Spark', 'SAM 3.1']
+const MODELS = ['Muse Spark', 'SAM 3.1', 'Muse Image']
 
 function HackathonBadge() {
   return (

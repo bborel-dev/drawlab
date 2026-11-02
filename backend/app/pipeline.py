@@ -6,6 +6,7 @@ from openai import APIError
 from PIL import Image
 
 from app.agents.art_director import ArtDirection, ask_art_director, parse_art_direction
+from app.agents.completer import Completion, Occlusion, complete_objects, find_occlusions
 from app.agents.cutter import Cut, arrange_cuts, cut_elements, mock_cut_elements
 from app.agents.edit_director import EditPlan, EditRequest, mock_plan_edits, plan_edits
 from app.scene_repaint import RepaintRequest, repainted_scene
@@ -20,7 +21,7 @@ from app.tracing import downscale_for_tracing
 
 logger = logging.getLogger("drawlab.pipeline")
 
-AgentName = Literal["art-director", "cutter", "illustrator"]
+AgentName = Literal["art-director", "cutter", "completer", "illustrator"]
 AgentStatus = Literal["working", "done", "error"]
 
 
@@ -104,7 +105,8 @@ def draw(
 ) -> Iterator[AgentEvent]:
     planned = yield from direct_art(client, image, previous_names)
     direction, cuts = yield from cut_objects(client, image, planned)
-    yield from illustrate(image, direction, cuts)
+    completions = yield from complete_hidden(client, image, direction, cuts)
+    yield from illustrate(image, direction, cuts, completions)
 
 
 def direct_art(
@@ -159,11 +161,37 @@ def outline_of(cut: Cut) -> MaskOutline | None:
     return MaskOutline(cut.element_name, path, width, height) if path else None
 
 
-def illustrate(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) -> Iterator[AgentEvent]:
+def complete_hidden(
+    client: ModelClient | None, image: Image.Image, direction: ArtDirection, cuts: list[Cut]
+) -> Iterator[AgentEvent]:
+    occlusions = find_occlusions(direction, cuts) if client else []
+    if client is None or not occlusions:
+        yield AgentEvent("completer", "done", "No hidden object to complete")
+        return []
+    names = ", ".join(occlusion.name for occlusion in occlusions)
+    yield AgentEvent("completer", "working", f"Muse Image is completing what hides behind other objects: {names}")
+    completions: list[Completion] = []
+    for occlusion, completion in complete_objects(client, image, direction, cuts, occlusions):
+        if completion:
+            completions.append(completion)
+        yield AgentEvent("completer", "working", completion_message(occlusion, completion))
+    yield AgentEvent("completer", "done", f"Completed {len(completions)} of {len(occlusions)} hidden objects")
+    return completions
+
+
+def completion_message(occlusion: Occlusion, completion: Completion | None) -> str:
+    if completion is None:
+        return f"Kept {occlusion.name} as it is"
+    return f"Completed {occlusion.name} behind " + ", ".join(occlusion.occluders)
+
+
+def illustrate(
+    image: Image.Image, direction: ArtDirection, cuts: list[Cut], completions: list[Completion]
+) -> Iterator[AgentEvent]:
     width, height = downscale_for_tracing(image).size
     yield AgentEvent("illustrator", "working", "Tracing the layers", canvas=Canvas(width, height))
     layer_count = 0
-    for layer in draw_layers(image, direction, cuts):
+    for layer in draw_layers(image, direction, cuts, completions):
         layer_count += 1
         yield AgentEvent("illustrator", "working", f"Drew {layer.name} ({strokes(layer.path_count)})", layer=layer.svg)
     yield AgentEvent("illustrator", "done", f"Finished {layer_count} layers")

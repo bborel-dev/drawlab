@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import DropZone from './DropZone'
 import { svgDocument, type Drawing } from './layers'
 import type { RecentDrawing } from './recentDrawings'
@@ -35,7 +35,7 @@ function EditorStart({ recents, error, onOpenRecent, onRemoveRecent, onImport, o
         </p>
       )}
       {recents.length > 0 ? (
-        <ul className="recent-grid">
+        <RecentStrip>
           {recents.map((recent) => (
             <RecentCard
               key={recent.id}
@@ -44,7 +44,7 @@ function EditorStart({ recents, error, onOpenRecent, onRemoveRecent, onImport, o
               onRemove={() => onRemoveRecent(recent.id)}
             />
           ))}
-        </ul>
+        </RecentStrip>
       ) : (
         <p className="panel-hint start-hint">
           Drawings you convert or open appear here. They stay in this browser only.
@@ -58,6 +58,27 @@ function EditorStart({ recents, error, onOpenRecent, onRemoveRecent, onImport, o
         label="Open an SVG"
       />
     </main>
+  )
+}
+
+function RecentStrip({ children }: { children: ReactNode }) {
+  const stripRef = useRef<HTMLUListElement>(null)
+  useEffect(() => {
+    const strip = stripRef.current
+    if (!strip) return
+    const scrollSideways = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return
+      if (strip.scrollWidth <= strip.clientWidth) return
+      event.preventDefault()
+      strip.scrollLeft += event.deltaY
+    }
+    strip.addEventListener('wheel', scrollSideways, { passive: false })
+    return () => strip.removeEventListener('wheel', scrollSideways)
+  }, [])
+  return (
+    <ul ref={stripRef} className="recent-strip">
+      {children}
+    </ul>
   )
 }
 
@@ -101,8 +122,9 @@ function Thumbnail({ drawing }: { drawing: Drawing }) {
     image.src = objectUrl
     return () => URL.revokeObjectURL(objectUrl)
   }, [drawing])
+  const { width, height } = drawing.canvas
   return (
-    <span className="recent-thumb">
+    <span className="recent-thumb" style={{ aspectRatio: `${width} / ${height}` }}>
       <img ref={imageRef} alt="" />
     </span>
   )

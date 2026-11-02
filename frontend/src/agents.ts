@@ -10,6 +10,7 @@ export type AgentStates = Record<AgentName, AgentState>
 export const AGENTS: { name: AgentName; label: string; model: string }[] = [
   { name: 'art-director', label: 'Analysis', model: 'Muse Spark' },
   { name: 'cutter', label: 'Segmentation', model: 'SAM 3.1' },
+  { name: 'completer', label: 'Completion', model: 'Muse Image' },
   { name: 'illustrator', label: 'Tracing', model: 'vtracer' },
 ]
 
