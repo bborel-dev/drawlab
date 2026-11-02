@@ -1,5 +1,6 @@
 import type { Canvas } from './api'
 import { layerName, svgDocument } from './layers'
+import { fillsByFrequency, replaceColors, shiftedFamily, toneFamilies, type ToneFamily } from './tones'
 
 export type LayerPart = {
   id: string
@@ -19,6 +20,10 @@ export type EditorLayer = {
 }
 
 export type LayerPatch = Partial<Pick<EditorLayer, 'visible' | 'x' | 'y' | 'opacity'>>
+
+export const BACKGROUND_COLOR_LAYER = 'background-color'
+const DEFAULT_BACKGROUND = '#FFFFFF'
+const DUPLICATE_OFFSET = 16
 
 export function parseLayers(markups: string[]): EditorLayer[] {
   return markups.map(parseLayer)
@@ -77,6 +82,68 @@ function colorsByFrequency(element: Element): string[] {
 
 export function layerColors(layer: EditorLayer): string[] {
   return [...new Set(layer.parts.flatMap((part) => part.colors))]
+}
+
+export function layerFamilies(layer: EditorLayer): ToneFamily[] {
+  return toneFamilies(layer.parts.map((part) => part.markup))
+}
+
+export function recolorFamily(layers: EditorLayer[], id: string, family: number, color: string): EditorLayer[] {
+  return layers.map((layer) => {
+    const target = layer.id === id ? layerFamilies(layer)[family] : undefined
+    if (!target) return layer
+    const colors = shiftedFamily(target, color)
+    return {
+      ...layer,
+      parts: layer.parts.map((part) => {
+        const markup = replaceColors(part.markup, colors)
+        return { ...part, markup, colors: fillsByFrequency(markup) }
+      }),
+    }
+  })
+}
+
+export function availableLayerId(name: string, layers: EditorLayer[], current?: string): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'layer'
+  const taken = new Set(layers.map((layer) => layer.id).filter((id) => id !== current))
+  let candidate = base
+  for (let count = 2; taken.has(candidate); count += 1) candidate = `${base}-${count}`
+  return candidate
+}
+
+export function renameLayer(layers: EditorLayer[], id: string, newId: string): EditorLayer[] {
+  return layers.map((layer) => (layer.id === id ? retagLayer(layer, newId) : layer))
+}
+
+export function duplicateLayer(layers: EditorLayer[], id: string, copyId: string): EditorLayer[] {
+  const index = layers.findIndex((layer) => layer.id === id)
+  if (index < 0) return layers
+  const copy = { ...retagLayer(layers[index], copyId), x: layers[index].x + DUPLICATE_OFFSET, y: layers[index].y + DUPLICATE_OFFSET }
+  return [...layers.slice(0, index + 1), copy, ...layers.slice(index + 1)]
+}
+
+export function deleteLayer(layers: EditorLayer[], id: string): EditorLayer[] {
+  return layers.filter((layer) => layer.id !== id)
+}
+
+export function withBackgroundLayer(layers: EditorLayer[], canvas: Canvas): EditorLayer[] {
+  if (layers.some((layer) => layer.id === BACKGROUND_COLOR_LAYER)) return layers
+  const path = `<path d="M0 0H${canvas.width}V${canvas.height}H0Z" fill="${DEFAULT_BACKGROUND}"/>`
+  const markup = `<g id="${BACKGROUND_COLOR_LAYER}"><g id="${BACKGROUND_COLOR_LAYER}-color" data-pass="color">${path}</g></g>`
+  return [...parseLayers([markup]), ...layers]
+}
+
+function retagLayer(layer: EditorLayer, newId: string): EditorLayer {
+  const prefix = `${layer.id}-`
+  return {
+    ...layer,
+    id: newId,
+    parts: layer.parts.map((part) => ({
+      ...part,
+      id: part.id.startsWith(prefix) ? `${newId}-${part.id.slice(prefix.length)}` : part.id,
+      markup: part.markup.split(`id="${prefix}`).join(`id="${newId}-`),
+    })),
+  }
 }
 
 export function updateLayer(layers: EditorLayer[], id: string, patch: LayerPatch): EditorLayer[] {

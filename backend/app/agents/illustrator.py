@@ -50,7 +50,9 @@ from app.underpaint import layer_sources, source_paths, trace_underpaint, underp
 from app.unknown_objects import color_name, find_unknown_objects, is_enclosed, surface_tone_map
 
 BACKGROUND_LAYER = "background"
+BACKGROUND_COLOR_LAYER = "background-color"
 SURFACE_COLOR_TIE = 30
+BORDER_COLOR_STEP = 8
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,7 @@ def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) ->
     reach = ink_reach(trace_image)
     ink = find_ink(trace_image, reach)
     color_image = snap_edge_blends(erase_ink(trace_image, ink))
+    yield background_color_layer(color_image)
     paths = trace_paths(color_image, hierarchical="cutout")
     paths, ids = split_regions_at_ink(paths, covering_id_map(paths, color_image.size), ink)
     names = layer_names(direction)
@@ -106,6 +109,22 @@ def draw_layers(image: Image.Image, direction: ArtDirection, cuts: list[Cut]) ->
         layer = assemble_layer(name, color, line)
         if layer:
             yield layer
+
+
+def background_color_layer(image: Image.Image) -> Layer:
+    width, height = image.size
+    color = border_color(np.asarray(image))
+    path = f'<path d="M0 0H{width}V{height}H0Z" fill="{color}"/>'
+    part = f'<g id="{BACKGROUND_COLOR_LAYER}-color" data-pass="color">{path}</g>'
+    return Layer(name=BACKGROUND_COLOR_LAYER, svg=f'<g id="{BACKGROUND_COLOR_LAYER}">{part}</g>', path_count=1)
+
+
+def border_color(pixels: np.ndarray) -> str:
+    border = np.concatenate([pixels[0], pixels[-1], pixels[:, 0], pixels[:, -1]])
+    quantized = (border // BORDER_COLOR_STEP).astype(np.int64)
+    keys = (quantized[:, 0] << 16) | (quantized[:, 1] << 8) | quantized[:, 2]
+    common = border[keys == np.bincount(keys).argmax()].mean(axis=0).round().astype(int)
+    return "#" + "".join(f"{channel:02X}" for channel in common)
 
 
 def assemble_svg(size: tuple[int, int], layers: list[Layer]) -> str:

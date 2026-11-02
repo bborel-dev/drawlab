@@ -1,6 +1,7 @@
-import { useState, type DragEvent } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 import { layerColors, type EditorLayer, type LayerPart } from './editorLayers'
 import { ChevronIcon, EyeIcon } from './icons'
+import { useLayerDrag } from './useLayerDrag'
 
 type LayersPanelProps = {
   layers: EditorLayer[]
@@ -9,12 +10,23 @@ type LayersPanelProps = {
   onToggleLayer: (id: string) => void
   onTogglePart: (layerId: string, partId: string) => void
   onReorder: (id: string, index: number) => void
+  onRename: (id: string, name: string) => void
 }
 
-function LayersPanel({ layers, selectedId, onSelect, onToggleLayer, onTogglePart, onReorder }: LayersPanelProps) {
+function LayersPanel({
+  layers,
+  selectedId,
+  onSelect,
+  onToggleLayer,
+  onTogglePart,
+  onReorder,
+  onRename,
+}: LayersPanelProps) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
-  const [draggedId, setDraggedId] = useState<string | null>(null)
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const { draggedId, dropTargetId, rowProps, listProps } = useLayerDrag((id, targetId) =>
+    onReorder(id, layers.findIndex((layer) => layer.id === targetId)),
+  )
 
   function toggleExpanded(id: string) {
     setExpanded((current) => {
@@ -24,41 +36,14 @@ function LayersPanel({ layers, selectedId, onSelect, onToggleLayer, onTogglePart
     })
   }
 
-  function endDrag() {
-    setDraggedId(null)
-    setDropTargetId(null)
-  }
-
-  function dropOn(targetId: string) {
-    if (draggedId) onReorder(draggedId, layers.findIndex((layer) => layer.id === targetId))
-    endDrag()
-  }
-
   return (
     <aside className="editor-panel" aria-label="Layers">
       <h2 className="panel-title">
         Layers <span className="panel-count">{layers.length}</span>
       </h2>
-      <ul className="layer-list">
+      <ul className="layer-list" {...listProps}>
         {[...layers].reverse().map((layer) => (
-          <li
-            key={layer.id}
-            draggable
-            onDragStart={(event: DragEvent) => {
-              event.dataTransfer.effectAllowed = 'move'
-              event.dataTransfer.setData('text/plain', layer.id)
-              setDraggedId(layer.id)
-            }}
-            onDragOver={(event: DragEvent) => {
-              event.preventDefault()
-              setDropTargetId(layer.id)
-            }}
-            onDrop={(event: DragEvent) => {
-              event.preventDefault()
-              dropOn(layer.id)
-            }}
-            onDragEnd={endDrag}
-          >
+          <li key={layer.id} {...rowProps(layer.id)}>
             <div className={layerRowClass(layer, selectedId, draggedId, dropTargetId)}>
               <button
                 type="button"
@@ -70,9 +55,25 @@ function LayersPanel({ layers, selectedId, onSelect, onToggleLayer, onTogglePart
                 <ChevronIcon />
               </button>
               <Swatch color={layerColors(layer)[0]} />
-              <button type="button" className="layer-name" onClick={() => onSelect(layer.id)}>
-                {layer.id}
-              </button>
+              {renamingId === layer.id ? (
+                <RenameField
+                  name={layer.id}
+                  onDone={(name) => {
+                    setRenamingId(null)
+                    if (name && name !== layer.id) onRename(layer.id, name)
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="layer-name"
+                  title="Double-click to rename"
+                  onClick={() => onSelect(layer.id)}
+                  onDoubleClick={() => setRenamingId(layer.id)}
+                >
+                  {layer.id}
+                </button>
+              )}
               <VisibilityButton
                 visible={layer.visible}
                 label={layer.id}
@@ -106,6 +107,27 @@ function layerRowClass(
     layer.id === dropTargetId && layer.id !== draggedId && 'is-drop-target',
   ]
   return ['layer-row', ...states.filter(Boolean)].join(' ')
+}
+
+function RenameField({ name, onDone }: { name: string; onDone: (name: string | null) => void }) {
+  const [value, setValue] = useState(name)
+
+  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') onDone(value.trim())
+    if (event.key === 'Escape') onDone(null)
+  }
+
+  return (
+    <input
+      className="layer-rename"
+      value={value}
+      autoFocus
+      aria-label={`Rename ${name}`}
+      onChange={(event) => setValue(event.target.value)}
+      onKeyDown={onKeyDown}
+      onBlur={() => onDone(value.trim())}
+    />
+  )
 }
 
 function PartRow({ part, onToggle }: { part: LayerPart; onToggle: () => void }) {

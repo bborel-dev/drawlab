@@ -1,16 +1,21 @@
+import base64
+import io
 import json
 from typing import Any, Iterable
 
 from openai import OpenAI
+from PIL import Image
 
 from app.budget import CallBudget
 from app.config import Settings
 
 SPARK_MODEL = "muse-spark-1.3"
 SAM_MODEL = "sam-3.1"
+IMAGE_MODEL = "muse-image-1.0"
 SPARK_INPUT_USD_PER_TOKEN = 1.25 / 1_000_000
 SPARK_OUTPUT_USD_PER_TOKEN = 4.25 / 1_000_000
 SAM_USD_PER_IMAGE = 2.50 / 1_000
+IMAGE_USD_PER_IMAGE = 0.01
 
 
 class ModelClient:
@@ -53,6 +58,24 @@ class ModelClient:
         output_text = collect_output_text(events)
         self._budget.record(SAM_MODEL, SAM_USD_PER_IMAGE, f'prompt="{prompt}"')
         return output_text
+
+    def edit_image(self, image: Image.Image, prompt: str) -> Image.Image:
+        self._budget.reserve()
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        response = self._client.images.edit(
+            model=IMAGE_MODEL,
+            image=("drawing.png", buffer.getvalue(), "image/png"),
+            prompt=prompt,
+            n=1,
+            size=f"{image.width}x{image.height}",
+            extra_body={"output_format": "png"},
+        )
+        self._budget.record(IMAGE_MODEL, IMAGE_USD_PER_IMAGE, f'prompt="{prompt[:80]}"')
+        encoded = response.data[0].b64_json if response.data else None
+        if not encoded:
+            raise ValueError("the image model returned no image")
+        return Image.open(io.BytesIO(base64.b64decode(encoded))).convert("RGB")
 
     def _record_spark_usage(self, usage: Any) -> None:
         if usage is None:

@@ -1,20 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
-import EditorCanvas from './EditorCanvas'
+import { requestEdit, streamRepaint } from './api'
+import { applyEditPlan, changedLayers, shownLayers, summarizeLayers, type EditPlan } from './drawingEdits'
+import EditorCanvas, { type Redraw } from './EditorCanvas'
 import {
+  availableLayerId,
+  deleteLayer,
+  duplicateLayer,
   editedSvgDocument,
   moveLayerTo,
   parseLayers,
+  recolorFamily,
+  renameLayer,
   savedLayerMarkups,
   toggleLayer,
   togglePart,
   updateLayer,
+  withBackgroundLayer,
   type EditorLayer,
   type LayerPatch,
 } from './editorLayers'
-import { BackIcon, RedoIcon, SparkleIcon, UndoIcon } from './icons'
+import { BackIcon, RedoIcon, UndoIcon } from './icons'
 import { downloadSvg, svgFileName, type Drawing } from './layers'
 import LayersPanel from './LayersPanel'
 import PropertiesPanel from './PropertiesPanel'
+import TalkBar, { type TalkAnswer } from './TalkBar'
 import { useHistory, useUndoShortcuts } from './useHistory'
 import ZoomControl from './ZoomControl'
 import { FIT_VIEW, zoomAround, type View } from './zoom'
@@ -32,13 +41,17 @@ type EditorPageProps = {
 const AUTOSAVE_DELAY_MS = 800
 
 function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPageProps) {
-  const history = useHistory(() => parseLayers(drawing.layers))
+  const history = useHistory(() => withBackgroundLayer(parseLayers(drawing.layers), drawing.canvas))
   const { present: layers, update, undo, redo } = history
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [view, setView] = useState<View>(FIT_VIEW)
+  const [redraw, setRedraw] = useState<Redraw | null>(null)
+  const editRequest = useRef<AbortController | null>(null)
+  const redrawCount = useRef(0)
   const selected = layers.find((layer) => layer.id === selectedId) ?? null
   useUndoShortcuts(active, undo, redo)
   useAutosave(layers, drawingId, onSave)
+  useEffect(() => () => editRequest.current?.abort(), [])
 
   function changeLayer(id: string, patch: LayerPatch, gesture?: string) {
     update((current) => updateLayer(current, id, patch), gesture && `${gesture}:${id}`)
@@ -46,6 +59,70 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
 
   function reorderLayer(id: string, index: number) {
     update((current) => moveLayerTo(current, id, index))
+  }
+
+  function recolorLayer(id: string, family: number, color: string) {
+    update((current) => recolorFamily(current, id, family, color), `fill:${id}:${family}`)
+  }
+
+  function renameSelected(id: string, name: string) {
+    const newId = availableLayerId(name, layers, id)
+    update((current) => renameLayer(current, id, newId))
+    if (selectedId === id) setSelectedId(newId)
+  }
+
+  function duplicate(id: string) {
+    const copyId = availableLayerId(`${id}-copy`, layers)
+    update((current) => duplicateLayer(current, id, copyId))
+    setSelectedId(copyId)
+  }
+
+  function remove(id: string) {
+    update((current) => deleteLayer(current, id))
+    if (selectedId === id) setSelectedId(null)
+  }
+
+  async function talkToDrawing(prompt: string, onProgress: (message: string) => void): Promise<TalkAnswer> {
+    editRequest.current?.abort()
+    const controller = new AbortController()
+    editRequest.current = controller
+    const svg = editedSvgDocument(drawing.canvas, layers)
+    const plan = await requestEdit(
+      { prompt, svg, layers: summarizeLayers(layers), selected: selectedId },
+      controller.signal,
+    )
+    if (plan.image_prompt) return repaint(plan, svg, onProgress, controller.signal)
+    if (plan.operations.length > 0) {
+      update((current) => applyEditPlan(current, plan, drawing.canvas))
+      setRedraw({ ids: shownLayers(plan), key: ++redrawCount.current })
+    }
+    return { reply: plan.reply, changed: changedLayers(plan) }
+  }
+
+  async function repaint(
+    plan: EditPlan,
+    svg: string,
+    onProgress: (message: string) => void,
+    signal: AbortSignal,
+  ): Promise<TalkAnswer> {
+    const markups: string[] = []
+    let failure: string | null = null
+    onProgress(plan.reply)
+    await streamRepaint(
+      { svg, image_prompt: plan.image_prompt, layer_names: layers.map((layer) => layer.id) },
+      (event) => {
+        if (event.layer) markups.push(event.layer)
+        if (event.status === 'error') failure = event.message
+        else onProgress(event.message)
+      },
+      signal,
+    )
+    if (failure || markups.length === 0) return { reply: failure ?? 'The scene could not be redrawn.', changed: [] }
+    const redrawn = withBackgroundLayer(parseLayers(markups), drawing.canvas)
+    update(() => redrawn)
+    setSelectedId(null)
+    setRedraw({ ids: redrawn.map((layer) => layer.id), key: ++redrawCount.current })
+    return { reply: plan.reply, changed: [`all ${redrawn.length} layers redrawn`] }
   }
 
   function exportSvg() {
@@ -115,14 +192,17 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
           onToggleLayer={(id) => update((current) => toggleLayer(current, id))}
           onTogglePart={(layerId, partId) => update((current) => togglePart(current, layerId, partId))}
           onReorder={reorderLayer}
+          onRename={renameSelected}
         />
         <EditorCanvas
           canvas={drawing.canvas}
           layers={layers}
           selectedId={selectedId}
           view={view}
+          redraw={redraw}
           onSelect={setSelectedId}
           onMove={(id, x, y) => changeLayer(id, { x, y }, 'move')}
+          onDelete={remove}
           onViewChange={setView}
         />
         <PropertiesPanel
@@ -131,22 +211,13 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
           layer={selected}
           onChange={changeLayer}
           onReorder={reorderLayer}
+          onRecolor={recolorLayer}
+          onDuplicate={duplicate}
+          onDelete={remove}
         />
       </div>
 
-      <label className="talk-bar">
-        <span className="talk-badge" aria-hidden="true">
-          <SparkleIcon />
-          AI
-        </span>
-        <input
-          className="talk-input"
-          type="text"
-          disabled
-          placeholder="Talk to the drawing: “make the roof red” · coming soon"
-          aria-label="Talk to the drawing"
-        />
-      </label>
+      <TalkBar onAsk={talkToDrawing} />
     </main>
   )
 }

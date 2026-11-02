@@ -9,6 +9,7 @@ from app.model_client import ModelClient
 
 MAX_ELEMENTS = 30
 MAX_ANCHORS = 4
+RESERVED_NAMES = ("background-color",)
 
 ElementKind = Literal["object", "surface"]
 OutlineKind = Literal["smooth", "detailed"]
@@ -114,10 +115,21 @@ class ArtDirection:
     elements: list[Element]
 
 
-def ask_art_director(client: ModelClient, image: Image.Image) -> ArtDirection:
+def ask_art_director(client: ModelClient, image: Image.Image, previous_names: list[str] | None = None) -> ArtDirection:
     image_url = to_data_url(downscale_for_models(image))
-    raw = client.ask_for_json(ART_DIRECTOR_PROMPT, [image_url], "ArtDirection", ART_DIRECTION_SCHEMA)
+    prompt = ART_DIRECTOR_PROMPT + previous_names_hint(previous_names or [])
+    raw = client.ask_for_json(prompt, [image_url], "ArtDirection", ART_DIRECTION_SCHEMA)
     return parse_art_direction(raw)
+
+
+def previous_names_hint(previous_names: list[str]) -> str:
+    if not previous_names:
+        return ""
+    return (
+        "\nThis image is an edited version of a drawing whose layers were named: "
+        + ", ".join(previous_names)
+        + ". Give the same name to every element that is still there."
+    )
 
 
 def parse_art_direction(raw: dict[str, Any]) -> ArtDirection:
@@ -151,7 +163,7 @@ def clamp_fraction(value: float) -> float:
 
 def with_unique_names(elements: list[Element]) -> list[Element]:
     planned = {element.name for element in elements}
-    taken: set[str] = set()
+    taken: set[str] = set(RESERVED_NAMES)
     unique: list[Element] = []
     for element in elements:
         name = element.name

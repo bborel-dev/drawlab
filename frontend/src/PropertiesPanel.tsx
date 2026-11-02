@@ -1,5 +1,5 @@
 import type { Canvas } from './api'
-import { layerColors, type EditorLayer, type LayerPatch } from './editorLayers'
+import { layerFamilies, type EditorLayer, type LayerPatch } from './editorLayers'
 
 type PropertiesPanelProps = {
   canvas: Canvas
@@ -7,11 +7,23 @@ type PropertiesPanelProps = {
   layer: EditorLayer | null
   onChange: (id: string, patch: LayerPatch, gesture?: string) => void
   onReorder: (id: string, index: number) => void
+  onRecolor: (id: string, family: number, color: string) => void
+  onDuplicate: (id: string) => void
+  onDelete: (id: string) => void
 }
 
-const MAX_SHOWN_COLORS = 8
+const MAX_SHOWN_FAMILIES = 8
 
-function PropertiesPanel({ canvas, layers, layer, onChange, onReorder }: PropertiesPanelProps) {
+function PropertiesPanel({
+  canvas,
+  layers,
+  layer,
+  onChange,
+  onReorder,
+  onRecolor,
+  onDuplicate,
+  onDelete,
+}: PropertiesPanelProps) {
   if (!layer) {
     return (
       <aside className="editor-panel" aria-label="Properties">
@@ -24,13 +36,13 @@ function PropertiesPanel({ canvas, layers, layer, onChange, onReorder }: Propert
           <dt>Layers</dt>
           <dd>{layers.length}</dd>
         </dl>
-        <p className="panel-hint">Select a layer on the canvas or in the list to move it.</p>
+        <p className="panel-hint">Select a layer on the canvas or in the list to move it, recolor it or rename it.</p>
       </aside>
     )
   }
 
   const index = layers.indexOf(layer)
-  const colors = layerColors(layer)
+  const families = layerFamilies(layer)
 
   return (
     <aside className="editor-panel" aria-label="Properties">
@@ -92,16 +104,34 @@ function PropertiesPanel({ canvas, layers, layer, onChange, onReorder }: Propert
       <section className="prop-section">
         <h3>Fills</h3>
         <ul className="fill-list">
-          {colors.slice(0, MAX_SHOWN_COLORS).map((color) => (
-            <li key={color}>
-              <span className="swatch" style={{ background: color }} aria-hidden="true" />
-              {color.toUpperCase()}
+          {families.slice(0, MAX_SHOWN_FAMILIES).map((family, position) => (
+            <li key={position}>
+              <input
+                type="color"
+                className="fill-picker"
+                value={family.color.toLowerCase()}
+                onChange={(event) => onRecolor(layer.id, position, event.target.value)}
+                aria-label={`Change ${family.color} in ${layer.id}`}
+              />
+              {family.color.toUpperCase()}
             </li>
           ))}
         </ul>
-        {colors.length > MAX_SHOWN_COLORS && (
-          <p className="panel-hint">+{colors.length - MAX_SHOWN_COLORS} more tones</p>
+        {families.length > MAX_SHOWN_FAMILIES && (
+          <p className="panel-hint">+{families.length - MAX_SHOWN_FAMILIES} more tones</p>
         )}
+      </section>
+
+      <section className="prop-section">
+        <h3>Layer</h3>
+        <div className="field-row">
+          <button type="button" className="button button-secondary button-small" onClick={() => onDuplicate(layer.id)}>
+            Duplicate
+          </button>
+          <button type="button" className="button button-secondary button-small" onClick={() => onDelete(layer.id)}>
+            Delete
+          </button>
+        </div>
       </section>
     </aside>
   )

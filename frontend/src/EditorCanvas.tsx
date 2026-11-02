@@ -1,17 +1,25 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
 import type { Canvas } from './api'
+import { animateLayer } from './drawingAnimation'
 import { layerTransform, type EditorLayer } from './editorLayers'
 import { panBy, zoomAround, type View } from './zoom'
 
 type ViewChange = (change: (view: View) => View) => void
+
+export type Redraw = {
+  ids: string[]
+  key: number
+}
 
 type EditorCanvasProps = {
   canvas: Canvas
   layers: EditorLayer[]
   selectedId: string | null
   view: View
+  redraw: Redraw | null
   onSelect: (id: string | null) => void
   onMove: (id: string, x: number, y: number) => void
+  onDelete: (id: string) => void
   onViewChange: ViewChange
 }
 
@@ -24,6 +32,7 @@ type Drag = {
   unitsPerPixel: number
 }
 
+const REDRAW_STAGGER_MS = 220
 const NUDGE_STEP = 1
 const LARGE_NUDGE_STEP = 10
 const NUDGES: Record<string, [number, number]> = {
@@ -35,7 +44,17 @@ const NUDGES: Record<string, [number, number]> = {
 const WHEEL_ZOOM_SPEED = 0.01
 const WHEEL_LINE_PIXELS = 16
 
-function EditorCanvas({ canvas, layers, selectedId, view, onSelect, onMove, onViewChange }: EditorCanvasProps) {
+function EditorCanvas({
+  canvas,
+  layers,
+  selectedId,
+  view,
+  redraw,
+  onSelect,
+  onMove,
+  onDelete,
+  onViewChange,
+}: EditorCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<Drag | null>(null)
@@ -44,6 +63,7 @@ function EditorCanvas({ canvas, layers, selectedId, view, onSelect, onMove, onVi
   const box = useLayerBox(svgRef, selected)
   const scale = fitScale * view.zoom
   useTrackpadView(stageRef, onViewChange)
+  useRedraw(svgRef, canvas, redraw)
 
   function startDrag(event: PointerEvent<SVGSVGElement>) {
     const layer = layers.find((candidate) => candidate.id === layerIdAt(event.target))
@@ -70,6 +90,7 @@ function EditorCanvas({ canvas, layers, selectedId, view, onSelect, onMove, onVi
 
   function nudge(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'Escape') onSelect(null)
+    if ((event.key === 'Delete' || event.key === 'Backspace') && selected) onDelete(selected.id)
     const direction = NUDGES[event.key]
     if (!selected || !direction) return
     event.preventDefault()
@@ -171,6 +192,15 @@ function useTrackpadView(stageRef: RefObject<HTMLDivElement | null>, onViewChang
     stage.addEventListener('wheel', onWheel, { passive: false })
     return () => stage.removeEventListener('wheel', onWheel)
   }, [stageRef, onViewChange])
+}
+
+function useRedraw(svgRef: RefObject<SVGSVGElement | null>, canvas: Canvas, redraw: Redraw | null): void {
+  useEffect(() => {
+    redraw?.ids.forEach((id, index) => {
+      const group = svgRef.current?.querySelector(`[data-layer="${CSS.escape(id)}"]`)
+      if (group) animateLayer(group, canvas, index * REDRAW_STAGGER_MS)
+    })
+  }, [svgRef, canvas, redraw])
 }
 
 function useLayerBox(svgRef: RefObject<SVGSVGElement | null>, layer: EditorLayer | null): DOMRect | null {
