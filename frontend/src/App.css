@@ -318,8 +318,28 @@
   margin: 40px auto 40px;
   padding: 18px 24px 20px;
   border: 1px solid var(--glass-edge);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   border-radius: 28px;
   box-shadow: var(--glass-shadow);
+}
+
+.converter::before {
+  position: absolute;
+  z-index: -1;
+  inset: -100% -70% 0;
+  content: '';
+  background-image:
+    linear-gradient(rgb(28 30 33 / 9%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(28 30 33 / 9%) 1px, transparent 1px);
+  background-position: center bottom;
+  background-size: 40px 40px;
+  transform: perspective(800px) rotateX(52deg);
+  transform-origin: center bottom;
+  -webkit-mask-image: linear-gradient(to top, #000 20%, transparent 80%);
+  mask-image: linear-gradient(to top, #000 20%, transparent 80%);
+  pointer-events: none;
 }
 
 .converter-empty {
