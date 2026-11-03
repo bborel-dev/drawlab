@@ -393,6 +393,11 @@
   opacity: 0.09;
 }
 
+.converter-empty::before,
+.editor-start::before {
+  opacity: 0.11;
+}
+
 .converter-empty {
   gap: 0;
   width: min(640px, 100% - 32px);
