@@ -3,9 +3,10 @@ import logging
 from dataclasses import asdict
 from typing import Iterator
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import APIRouter, FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 
 from app.agents.edit_director import EditRequest
@@ -26,6 +27,7 @@ from app.scene_repaint import ProposalRequest, RedrawRequest
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
 app = FastAPI(title="Drawlab")
+router = APIRouter(prefix="/api")
 
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 MAX_PROMPT_CHARS = 500
@@ -36,25 +38,12 @@ MAX_IMAGE_DATA_CHARS = 20_000_000
 MAX_CANVAS_SIDE = 8192
 
 
-def allow_origins(settings: Settings) -> None:
-    if settings.allowed_origins:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=list(settings.allowed_origins),
-            allow_methods=["GET", "POST"],
-            allow_headers=["Content-Type"],
-        )
-
-
-allow_origins(load_settings())
-
-
-@app.get("/quota")
+@router.get("/quota")
 def quota(request: Request) -> dict[str, object]:
     return asdict(visitor_quota(request, load_settings()))
 
 
-@app.post("/draw")
+@router.post("/draw")
 async def draw(request: Request, image: UploadFile) -> StreamingResponse:
     settings = load_settings()
     token = admit_conversion(request, settings)
@@ -66,7 +55,7 @@ async def draw(request: Request, image: UploadFile) -> StreamingResponse:
     return event_stream(holding_slot(token, run_drawing_job(picture, settings)))
 
 
-@app.post("/edit")
+@router.post("/edit")
 def edit(request: Request, body: EditRequest) -> dict[str, object]:
     check_edit_request(body)
     settings = load_settings()
@@ -74,7 +63,7 @@ def edit(request: Request, body: EditRequest) -> dict[str, object]:
     return asdict(run_edit_job(body, settings))
 
 
-@app.post("/repaint/proposal")
+@router.post("/repaint/proposal")
 def repaint_proposal(request: Request, body: ProposalRequest) -> dict[str, str]:
     check_proposal_request(body)
     settings = load_settings()
@@ -85,12 +74,28 @@ def repaint_proposal(request: Request, body: ProposalRequest) -> dict[str, str]:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
-@app.post("/repaint")
+@router.post("/repaint")
 def repaint(request: Request, body: RedrawRequest) -> StreamingResponse:
     check_redraw_request(body)
     settings = load_settings()
     token = admit_repaint(request, settings)
     return event_stream(holding_slot(token, run_repaint_job(body, settings)))
+
+
+def configure(settings: Settings) -> None:
+    if settings.allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.allowed_origins),
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+        )
+    app.include_router(router)
+    if settings.frontend_dir:
+        app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="site")
+
+
+configure(load_settings())
 
 
 def check_proposal_request(request: ProposalRequest) -> None:

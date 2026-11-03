@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 from collections import deque
@@ -8,6 +9,8 @@ from fastapi import HTTPException, Request
 
 from app.budget import DAILY_LIMIT_MESSAGE, DAILY_SPEND
 from app.config import Settings
+
+logger = logging.getLogger("drawlab.guardrails")
 
 QUOTA_WINDOW_SECONDS = 24 * 3600
 STALE_JOB_SECONDS = 15 * 60
@@ -94,15 +97,16 @@ PROPOSALS = RateLimiter()
 DRAWING_SLOT = JobSlot()
 
 
-def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[-1].strip()
+def client_ip(request: Request, settings: Settings) -> str:
+    chain = [address.strip() for address in request.headers.get("x-forwarded-for", "").split(",") if address.strip()]
+    if chain:
+        return chain[-min(settings.forwarded_hops, len(chain))]
     return request.client.host if request.client else "unknown"
 
 
 def visitor_quota(request: Request, settings: Settings) -> Quota:
-    visitor = client_ip(request)
+    visitor = client_ip(request, settings)
+    logger.info("quota visitor=%s forwarded=%r", visitor, request.headers.get("x-forwarded-for", ""))
     return Quota(
         conversions=Allowance(
             CONVERSIONS.remaining(visitor, settings.max_conversions_per_visitor), settings.max_conversions_per_visitor
@@ -130,13 +134,13 @@ def admit_proposal(request: Request, settings: Settings) -> None:
 
 def admit(request: Request, settings: Settings, limiter: RateLimiter, limit: int, kind: str) -> None:
     ensure_daily_room(settings)
-    if not limiter.allow(client_ip(request), limit):
+    if not limiter.allow(client_ip(request, settings), limit):
         raise HTTPException(status_code=TOO_MANY_REQUESTS, detail=quota_message(kind))
 
 
 def admit_drawing(request: Request, settings: Settings, limiter: RateLimiter, limit: int, kind: str) -> int:
     ensure_daily_room(settings)
-    token = DRAWING_SLOT.try_acquire(client_ip(request))
+    token = DRAWING_SLOT.try_acquire(client_ip(request, settings))
     if token is None:
         raise HTTPException(status_code=TOO_MANY_REQUESTS, detail=BUSY_MESSAGE)
     try:

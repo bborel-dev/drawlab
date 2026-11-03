@@ -9,6 +9,7 @@ DEFAULT_MAX_DAILY_SPEND_USD = 5.0
 DEFAULT_MAX_CONVERSIONS_PER_VISITOR = 5
 DEFAULT_MAX_EDITS_PER_VISITOR = 5
 DEFAULT_MAX_PROPOSALS_PER_VISITOR = 30
+DEFAULT_FORWARDED_HOPS = 1
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,8 @@ class Settings:
     max_edits_per_visitor: int
     max_proposals_per_visitor: int
     allowed_origins: tuple[str, ...]
+    frontend_dir: str
+    forwarded_hops: int
 
 
 def load_settings() -> Settings:
@@ -40,6 +43,8 @@ def load_settings() -> Settings:
             os.environ.get("MAX_PROPOSALS_PER_VISITOR", DEFAULT_MAX_PROPOSALS_PER_VISITOR)
         ),
         allowed_origins=origin_list(os.environ.get("ALLOWED_ORIGINS", "")),
+        frontend_dir=os.environ.get("FRONTEND_DIR", ""),
+        forwarded_hops=max(1, int(os.environ.get("FORWARDED_HOPS", DEFAULT_FORWARDED_HOPS))),
     )
 
 

@@ -129,6 +129,16 @@ npm run dev
 | `MAX_PROPOSALS_PER_VISITOR` | `30` | Muse Image proposals and retouches allowed per visitor over 24 hours. |
 | `ALLOWED_ORIGINS` | empty | Comma-separated frontend origins allowed to call the backend (CORS), such as `https://drawlab.vercel.app`. |
 | `VITE_API_URL` | `/api` | Frontend only: backend URL when the frontend and the backend are hosted apart. |
+| `FRONTEND_DIR` | empty | Folder of the built frontend that the backend serves at `/` (set in the Docker image). |
+| `FORWARDED_HOPS` | `1` | Proxies in front of the backend, used to read the visitor IP from `X-Forwarded-For`. |
+
+## Deploy on Hugging Face Spaces
+
+The `Dockerfile` builds the frontend and serves it from the backend, so the whole app runs as one free Docker Space.
+
+1. Create a Space on Hugging Face with the **Docker** SDK and the **CPU basic** hardware.
+2. In the Space settings, add the secret `MODEL_API_KEY`, and optionally the budget variables above.
+3. Commit, then run `python scripts/deploy_space.py <user>/<space>`. It pushes the code without images or docs, and adds the Space header to the README.
 
 ## Project structure
 
@@ -136,7 +146,7 @@ npm run dev
 backend/app/
   agents/        Art Director, Cutter, Mask reviewer, Completer, Illustrator, Edit Director
   pipeline.py    Runs the agents and streams their events
-  main.py        FastAPI routes: /draw, /edit, /repaint/proposal, /repaint, /quota
+  main.py        FastAPI routes under /api (draw, edit, repaint/proposal, repaint, quota), and the built site at /
   guardrails.py  Visitor quotas, single drawing slot and daily spending cap
 frontend/src/    React app: converter, drawing animation, layer editor, talk bar
 scripts/         Benchmarks and tools to try the agents on sample images
