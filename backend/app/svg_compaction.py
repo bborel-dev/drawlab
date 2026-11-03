@@ -1,10 +1,11 @@
 import re
 
+from app.seams import SEAM_ATTRIBUTES
+
 PATH_ELEMENT = re.compile(r"<path ([^>]*)/>")
 ATTRIBUTE = re.compile(r'([a-z-]+)="([^"]*)"')
 TRANSLATE = re.compile(r"translate\(\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*\)")
 PATH_TOKEN = re.compile(r"[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?")
-SEAM_ATTRIBUTES = ' stroke-width="1" stroke-linejoin="round"'
 COLOR_GROUP_OPEN = 'data-pass="color"'
 COMMAND_SIZES = {"M": 2, "L": 2, "C": 6, "Z": 0}
 STRAIGHT_TOLERANCE = 1.5

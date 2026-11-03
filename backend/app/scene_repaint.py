@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import resvg_py
 from PIL import Image
 
-from app.images import from_data_url
+from app.images import fit_within, from_data_url
 from app.model_client import ModelClient
 
 MAX_IMAGE_EDIT_SIDE = 1536
@@ -46,6 +46,4 @@ def edited_image(client: ModelClient, image: Image.Image, prompt: str) -> Image.
 
 
 def model_sized(image: Image.Image) -> Image.Image:
-    sent = image.copy()
-    sent.thumbnail((MAX_IMAGE_EDIT_SIDE, MAX_IMAGE_EDIT_SIDE))
-    return sent
+    return fit_within(image, MAX_IMAGE_EDIT_SIDE)

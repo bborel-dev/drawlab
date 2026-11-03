@@ -9,7 +9,7 @@ import numpy as np
 from meta_sam_parser import SegmentationMaskRecord
 from PIL import Image
 
-from app.agents.art_director import ArtDirection, Element
+from app.agents.art_director import ArtDirection, Element, free_name
 from app.budget import BudgetExceededError
 from app.fixtures import load_mask
 from app.images import downscale_for_models, to_data_url
@@ -76,7 +76,7 @@ def segment_prompts(client: ModelClient, image_url: str, elements: list[Element]
 def group_by_prompt(elements: list[Element]) -> dict[str, list[Element]]:
     groups: dict[str, list[Element]] = {}
     for element in elements:
-        groups.setdefault(element.sam_prompt.lower(), []).append(element)
+        groups.setdefault(prompt_key(element), []).append(element)
     return groups
 
 
@@ -254,14 +254,6 @@ def inner_point(mask: Image.Image) -> tuple[float, float]:
     distances = cv2.distanceTransform((np.asarray(mask) > 127).astype(np.uint8), cv2.DIST_L2, 3)
     row, column = np.unravel_index(int(distances.argmax()), distances.shape)
     return float(column) + 0.5, float(row) + 0.5
-
-
-def free_name(base: str, taken: set[str]) -> str:
-    name, count = base, 1
-    while name in taken:
-        count += 1
-        name = f"{base}-{count}"
-    return name
 
 
 def match_cost(record: SegmentationMaskRecord, element: Element, size: tuple[int, int]) -> tuple[float, float]:

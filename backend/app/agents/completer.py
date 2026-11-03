@@ -12,9 +12,9 @@ from app.agents.art_director import ArtDirection, Element
 from app.agents.cutter import Cut
 from app.budget import BudgetExceededError
 from app.images import downscale_for_models, to_data_url
-from app.masks import parse_mask_records, render_mask
+from app.masks import convex_hull_mask, parse_mask_records, render_mask
 from app.model_client import ModelClient
-from app.scene_repaint import MAX_IMAGE_EDIT_SIDE, edited_image
+from app.scene_repaint import edited_image, model_sized
 
 logger = logging.getLogger("drawlab.completer")
 
@@ -79,7 +79,7 @@ def occlusion_of(name: str, visible: np.ndarray, fronts: dict[str, np.ndarray]) 
     if not occluders:
         return None
     covering = np.logical_or.reduce([fronts[front] for front in occluders])
-    hidden = int((convex_hull(visible) & covering & ~visible).sum())
+    hidden = int((convex_hull_mask(visible) & covering & ~visible).sum())
     contact_share = sum(contacts[front] for front in occluders) / ring_area
     large_hidden = hidden >= MIN_HIDDEN_SHARE * visible.sum() and hidden >= MIN_HIDDEN_AREA * visible.size
     if not large_hidden and contact_share < MIN_CONTACT_SHARE:
@@ -90,8 +90,7 @@ def occlusion_of(name: str, visible: np.ndarray, fronts: dict[str, np.ndarray]) 
 def complete_objects(
     client: ModelClient, image: Image.Image, direction: ArtDirection, cuts: list[Cut], occlusions: list[Occlusion]
 ) -> Iterator[tuple[Occlusion, Completion | None]]:
-    work = image.copy()
-    work.thumbnail((MAX_IMAGE_EDIT_SIDE, MAX_IMAGE_EDIT_SIDE))
+    work = model_sized(image)
     elements = {element.name: element for element in direction.elements}
     masks = visible_masks(cuts)
     with ThreadPoolExecutor(max_workers=PARALLEL_COMPLETIONS) as pool:
@@ -192,14 +191,6 @@ def fits_visible(shape: np.ndarray, visible: np.ndarray, hidden_zone: np.ndarray
     spill = (shape & ~visible & ~hidden_zone).sum() / area
     grows = bool((shape & hidden_zone & ~visible).any())
     return coverage >= MIN_VISIBLE_COVERAGE and spill <= MAX_SPILL and grows
-
-
-def convex_hull(visible: np.ndarray) -> np.ndarray:
-    hull = np.zeros(visible.shape, dtype=np.uint8)
-    points = cv2.findNonZero(visible.astype(np.uint8))
-    if points is not None:
-        cv2.fillConvexPoly(hull, cv2.convexHull(points), 1)
-    return hull.astype(bool)
 
 
 def ring_kernel() -> np.ndarray:

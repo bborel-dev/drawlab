@@ -14,6 +14,16 @@ export function layerName(markup: string): string {
   return markup.match(LAYER_NAME_PATTERN)?.[1] ?? 'layer'
 }
 
+export function layerSlug(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+export function freeName(base: string, taken: ReadonlySet<string>): string {
+  let name = base
+  for (let count = 2; taken.has(name); count += 1) name = `${base}-${count}`
+  return name
+}
+
 export function svgDocument(canvas: Canvas, layers: string[]): string {
   const { width, height } = canvas
   return (

@@ -9,6 +9,7 @@ from app.nearest_fill import fill_from_nearest
 from app.tracing import svg_document, trace_paths
 
 SEAM_STROKE_WIDTH = 1
+SEAM_ATTRIBUTES = f' stroke-width="{SEAM_STROKE_WIDTH}" stroke-linejoin="round"'
 GAP_MAX_ALPHA = 128
 GAP_CONTEXT_MARGIN = 4
 
@@ -18,7 +19,7 @@ def seal_seams(path: str) -> str:
     if match is None:
         return path
     color = match.group(0)[6:13]
-    return path.replace("/>", f' stroke="{color}" stroke-width="{SEAM_STROKE_WIDTH}" stroke-linejoin="round"/>', 1)
+    return path.replace("/>", f' stroke="{color}"{SEAM_ATTRIBUTES}/>', 1)
 
 
 def find_gaps(paths: list[str], size: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:

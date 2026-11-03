@@ -23,9 +23,13 @@ def has_transparency(image: Image.Image) -> bool:
 
 
 def downscale_for_models(image: Image.Image) -> Image.Image:
-    model_image = image.copy()
-    model_image.thumbnail((MAX_MODEL_IMAGE_SIDE, MAX_MODEL_IMAGE_SIDE))
-    return model_image
+    return fit_within(image, MAX_MODEL_IMAGE_SIDE)
+
+
+def fit_within(image: Image.Image, side: int) -> Image.Image:
+    fitted = image.copy()
+    fitted.thumbnail((side, side))
+    return fitted
 
 
 def to_png_bytes(image: Image.Image) -> bytes:

@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass, replace
-from typing import Any, Literal
+from typing import Any, Collection, Literal
 
 from PIL import Image
 
@@ -160,6 +160,14 @@ def parse_element(item: dict[str, Any]) -> Element:
 
 def to_layer_name(raw_name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", raw_name.lower()).strip("-") or "element"
+
+
+def free_name(base: str, taken: Collection[str]) -> str:
+    name, count = base, 1
+    while name in taken:
+        count += 1
+        name = f"{base}-{count}"
+    return name
 
 
 def clamp_fraction(value: float) -> float:

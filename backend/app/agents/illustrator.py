@@ -4,7 +4,7 @@ from typing import Iterator
 import numpy as np
 from PIL import Image
 
-from app.agents.art_director import ArtDirection
+from app.agents.art_director import ArtDirection, free_name
 from app.agents.completer import Completion
 from app.agents.cutter import Cut
 from app.edge_blends import snap_edge_blends
@@ -37,7 +37,12 @@ from app.ink import (
     ink_clip_region,
     keep_ink_on_top,
 )
-from app.region_merging import merge_similar_regions, snap_region_boundaries, split_regions_by_owner
+from app.region_merging import (
+    majority_owner,
+    merge_similar_regions,
+    snap_region_boundaries,
+    split_regions_by_owner,
+)
 from app.seams import find_gaps, seal_seams, trace_gap_patch
 from app.svg_compaction import compact_markup
 from app.tracing import (
@@ -86,7 +91,7 @@ def draw_layers(
     surfaces = surface_centers(direction, names, color_image.size)
     paths, ids = split_contested_regions(paths, ids, owners, surfaces)
     paths = recolor_from_pixels(paths, ids, color_pixels)
-    path_owner = assign_paths(ids, owners, len(paths), len(names))
+    path_owner = assign_paths(ids, owners, len(paths))
     unowned = path_owner == UNOWNED
     fill_unowned_paths(path_owner, paths, ids, direction, names)
     region_detailed = detailed_layers(direction, names)[path_owner]
@@ -169,11 +174,8 @@ def paint_object_owners(cuts: list[Cut], names: list[str], size: tuple[int, int]
     return owners
 
 
-def assign_paths(ids: np.ndarray, owners: np.ndarray, path_count: int, layer_count: int) -> np.ndarray:
-    columns = layer_count + 1
-    pairs = ids * columns + (owners + 1)
-    counts = np.bincount(pairs.ravel(), minlength=(path_count + 1) * columns).reshape(path_count + 1, columns)
-    return counts.argmax(axis=1) - 1
+def assign_paths(ids: np.ndarray, owners: np.ndarray, path_count: int) -> np.ndarray:
+    return majority_owner(ids.ravel(), owners.ravel(), path_count + 1)
 
 
 def fill_unowned_paths(
@@ -211,7 +213,7 @@ def adopt_unknown_objects(
         if owner is None and not is_enclosed(unknown.paths, path_owner, ids):
             continue
         if owner is None:
-            adopted.append(unique_name(f"{color_name(unknown.color)}-shape", adopted))
+            adopted.append(free_name(f"{color_name(unknown.color)}-shape", adopted))
             owner = len(adopted) - 1
         else:
             del missed[owner]
@@ -271,14 +273,6 @@ def trace_completions(completions: list[Completion], names: list[str], pixel_own
 def surface_indexes(direction: ArtDirection, names: list[str]) -> list[int]:
     surfaces = [names.index(element.name) for element in direction.elements if element.kind == "surface"]
     return surfaces or [names.index(BACKGROUND_LAYER)]
-
-
-def unique_name(base: str, taken: list[str]) -> str:
-    name, count = base, 1
-    while name in taken:
-        count += 1
-        name = f"{base}-{count}"
-    return name
 
 
 def surface_centers(

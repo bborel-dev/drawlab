@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { MaskOutline } from './api'
 
 type SegmentationOverlayProps = {
@@ -6,7 +6,7 @@ type SegmentationOverlayProps = {
   onRevealEndChange: (endsAt: number) => void
 }
 
-type Point = { x: number; y: number }
+type Bounds = { left: number; right: number; top: number; bottom: number }
 
 const REVEAL_STAGGER_MS = 450
 const REVEAL_DURATION_MS = 900
@@ -38,6 +38,7 @@ function SegmentationOverlay({ masks, onRevealEndChange }: SegmentationOverlayPr
     onRevealEndChange(nextRevealRef.current - REVEAL_STAGGER_MS + REVEAL_DURATION_MS + HOLD_AFTER_REVEAL_MS)
   }, [masks, onRevealEndChange])
 
+  const labelPositions = useMemo(() => masks.map(labelPosition), [masks])
   const revealed = masks.slice(0, revealedCount)
   if (revealed.length === 0) return null
   const { width, height } = revealed[0]
@@ -58,7 +59,7 @@ function SegmentationOverlay({ masks, onRevealEndChange }: SegmentationOverlayPr
         ))}
       </svg>
       {revealed.map((mask, index) => (
-        <span key={mask.name} className="mask-label" style={{ ...maskStyle(index), ...labelPosition(mask) }}>
+        <span key={mask.name} className="mask-label" style={{ ...maskStyle(index), ...labelPositions[index] }}>
           {mask.name}
         </span>
       ))}
@@ -71,11 +72,7 @@ function maskStyle(index: number): CSSProperties {
 }
 
 function labelPosition(mask: MaskOutline): CSSProperties {
-  const points = outlinePoints(mask.path)
-  const left = Math.min(...points.map((point) => point.x))
-  const right = Math.max(...points.map((point) => point.x))
-  const top = Math.min(...points.map((point) => point.y))
-  const bottom = Math.max(...points.map((point) => point.y))
+  const { left, right, top, bottom } = outlineBounds(mask.path)
   const leftPercent = ((left + right) / 2 / mask.width) * 100
   const topPercent = ((top + bottom) / 2 / mask.height) * 100
   return {
@@ -84,13 +81,16 @@ function labelPosition(mask: MaskOutline): CSSProperties {
   }
 }
 
-function outlinePoints(path: string): Point[] {
+function outlineBounds(path: string): Bounds {
   const numbers = path.match(/-?\d+(\.\d+)?/g)?.map(Number) ?? []
-  const points: Point[] = []
+  const bounds = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity }
   for (let index = 0; index + 1 < numbers.length; index += 2) {
-    points.push({ x: numbers[index], y: numbers[index + 1] })
+    bounds.left = Math.min(bounds.left, numbers[index])
+    bounds.right = Math.max(bounds.right, numbers[index])
+    bounds.top = Math.min(bounds.top, numbers[index + 1])
+    bounds.bottom = Math.max(bounds.bottom, numbers[index + 1])
   }
-  return points
+  return bounds
 }
 
 export default SegmentationOverlay

@@ -75,6 +75,8 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
     [streamDone, canvas, layers, sourceName],
   )
 
+  const drawingSvg = useMemo(() => (canvas ? svgDocument(canvas, layers) : ''), [canvas, layers])
+
   useEffect(() => {
     if (phase === 'done' && drawing) onDrawn(drawing)
   }, [phase, drawing, onDrawn])
@@ -181,7 +183,6 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
     )
   }
 
-  const drawingSvg = canvas ? svgDocument(canvas, layers) : ''
   const status = drawingProgress({
     states: agentStates,
     currentLayer,

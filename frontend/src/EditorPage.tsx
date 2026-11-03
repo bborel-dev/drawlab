@@ -32,6 +32,8 @@ import { FIT_VIEW, zoomAround, type View } from './zoom'
 
 type SaveLayers = (drawingId: string, layers: string[]) => void
 
+type ReportProgress = (progress: TalkProgress) => void
+
 type EditorPageProps = {
   drawingId: string
   drawing: Drawing
@@ -96,7 +98,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
     if (selectedId === id) setSelectedId(null)
   }
 
-  async function talkToDrawing(prompt: string, onProgress: (progress: TalkProgress) => void): Promise<TalkAnswer> {
+  async function talkToDrawing(prompt: string, onProgress: ReportProgress): Promise<TalkAnswer> {
     setTalkRunning(true)
     try {
       return await runTalk(prompt, onProgress)
@@ -105,7 +107,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
     }
   }
 
-  async function runTalk(prompt: string, onProgress: (progress: TalkProgress) => void): Promise<TalkAnswer> {
+  async function runTalk(prompt: string, onProgress: ReportProgress): Promise<TalkAnswer> {
     editRequest.current?.abort()
     const controller = new AbortController()
     editRequest.current = controller
@@ -125,7 +127,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
   async function repaint(
     plan: EditPlan,
     svg: string,
-    onProgress: (progress: TalkProgress) => void,
+    onProgress: ReportProgress,
     signal: AbortSignal,
   ): Promise<TalkAnswer> {
     try {
@@ -141,7 +143,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
   async function chooseProposal(
     plan: EditPlan,
     svg: string,
-    onProgress: (progress: TalkProgress) => void,
+    onProgress: ReportProgress,
     signal: AbortSignal,
   ): Promise<string | null> {
     onProgress({ stage: 'proposing', message: 'Muse Image is repainting the scene…' })
@@ -175,7 +177,7 @@ function EditorPage({ drawingId, drawing, active, onSave, onBack }: EditorPagePr
   async function drawScene(
     image: string,
     reply: string,
-    onProgress: (progress: TalkProgress) => void,
+    onProgress: ReportProgress,
     signal: AbortSignal,
   ): Promise<TalkAnswer> {
     const markups: string[] = []

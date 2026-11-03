@@ -56,12 +56,7 @@ export async function streamDrawing(
 }
 
 export async function requestProposal(body: ProposalRequest, signal: AbortSignal): Promise<string> {
-  const response = await fetch('/api/repaint/proposal', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  })
+  const response = await postJson('/api/repaint/proposal', body, signal)
   if (!response.ok) throw new Error(`Repaint proposal failed (${response.status})`)
   return ((await response.json()) as { image: string }).image
 }
@@ -71,13 +66,16 @@ export async function streamRepaint(
   onEvent: (event: AgentEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const response = await fetch('/api/repaint', {
+  await readEvents(await postJson('/api/repaint', body, signal), onEvent)
+}
+
+function postJson(url: string, body: unknown, signal: AbortSignal): Promise<Response> {
+  return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
   })
-  await readEvents(response, onEvent)
 }
 
 async function readEvents(response: Response, onEvent: (event: AgentEvent) => void): Promise<void> {
@@ -101,12 +99,7 @@ function parseEvent(message: string): AgentEvent {
 }
 
 export async function requestEdit(body: EditRequest, signal: AbortSignal): Promise<EditPlan> {
-  const response = await fetch('/api/edit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  })
+  const response = await postJson('/api/edit', body, signal)
   if (!response.ok) throw new Error(`Edit failed (${response.status})`)
   return (await response.json()) as EditPlan
 }

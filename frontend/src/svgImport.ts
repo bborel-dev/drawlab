@@ -1,5 +1,5 @@
 import type { Canvas } from './api'
-import type { Drawing } from './layers'
+import { freeName, layerSlug, type Drawing } from './layers'
 
 export type ImportedSvg = {
   drawing: Drawing
@@ -103,11 +103,8 @@ function foreignLayers(root: Element): string[] {
 }
 
 function layerBaseName(element: Element, ownId: string, tagCounts: Map<string, number>): string {
-  const label = ownId || element.getAttribute('inkscape:label')
-  if (label) {
-    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-    if (slug) return slug
-  }
+  const slug = layerSlug(ownId || element.getAttribute('inkscape:label') || '')
+  if (slug) return slug
   const tag = TAG_NAMES[element.localName] ?? element.localName
   const count = (tagCounts.get(tag) ?? 0) + 1
   tagCounts.set(tag, count)
@@ -115,8 +112,7 @@ function layerBaseName(element: Element, ownId: string, tagCounts: Map<string, n
 }
 
 function uniqueName(base: string, taken: Set<string>): string {
-  let name = base
-  for (let count = 2; taken.has(name); count += 1) name = `${base}-${count}`
+  const name = freeName(base, taken)
   taken.add(name)
   return name
 }

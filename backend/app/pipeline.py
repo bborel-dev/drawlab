@@ -67,17 +67,7 @@ class ProposalError(RuntimeError):
 def run_drawing_job(image: Image.Image, settings: Settings) -> Iterator[AgentEvent]:
     budget = CallBudget(max_calls=settings.max_api_calls_per_job)
     client = None if settings.mock_agents else ModelClient(settings, budget)
-    current_agent: AgentName = "art-director"
-    try:
-        for event in draw(client, image):
-            current_agent = event.agent
-            yield event
-    except BudgetExceededError as error:
-        yield AgentEvent(current_agent, "error", str(error))
-    except Exception:
-        logger.exception("drawing job failed")
-        yield AgentEvent(current_agent, "error", "Something went wrong while drawing")
-    logger.info("job finished calls=%d cost=$%.4f", budget.calls, budget.cost_usd)
+    yield from guarded("drawing", draw(client, image), budget)
 
 
 def run_edit_job(request: EditRequest, settings: Settings) -> EditPlan:
@@ -90,7 +80,7 @@ def run_edit_job(request: EditRequest, settings: Settings) -> EditPlan:
         logger.exception("edit job failed")
         return EditPlan("I could not edit the drawing this time, please try again.", "", [])
     finally:
-        logger.info("edit finished calls=%d cost=$%.4f", budget.calls, budget.cost_usd)
+        log_budget("edit", budget)
 
 
 def run_proposal_job(request: ProposalRequest, settings: Settings) -> str:
@@ -105,7 +95,7 @@ def run_proposal_job(request: ProposalRequest, settings: Settings) -> str:
         raise ProposalError("Muse Image could not repaint the scene, please try again") from error
     finally:
         log_duration("proposal", started)
-        logger.info("proposal finished calls=%d cost=$%.4f", budget.calls, budget.cost_usd)
+        log_budget("proposal", budget)
 
 
 def run_repaint_job(request: RedrawRequest, settings: Settings) -> Iterator[AgentEvent]:
@@ -113,19 +103,30 @@ def run_repaint_job(request: RedrawRequest, settings: Settings) -> Iterator[Agen
         yield AgentEvent("art-director", "error", "Repainting needs the real models, set MOCK_AGENTS=false")
         return
     budget = CallBudget(max_calls=settings.max_api_calls_per_job)
-    client = ModelClient(settings, budget)
+    yield from guarded("repainting", redraw(ModelClient(settings, budget), request), budget)
+
+
+def guarded(job: str, events: Iterator[AgentEvent], budget: CallBudget) -> Iterator[AgentEvent]:
     current_agent: AgentName = "art-director"
-    names = [name for name in request.layer_names if name != BACKGROUND_COLOR_LAYER]
     try:
-        for event in draw(client, accepted_scene(request), redraw_options(names)):
+        for event in events:
             current_agent = event.agent
             yield event
     except BudgetExceededError as error:
         yield AgentEvent(current_agent, "error", str(error))
     except Exception:
-        logger.exception("repaint job failed")
-        yield AgentEvent(current_agent, "error", "Something went wrong while repainting")
-    logger.info("repaint finished calls=%d cost=$%.4f", budget.calls, budget.cost_usd)
+        logger.exception("%s job failed", job)
+        yield AgentEvent(current_agent, "error", f"Something went wrong while {job}")
+    log_budget(job, budget)
+
+
+def log_budget(job: str, budget: CallBudget) -> None:
+    logger.info("%s finished calls=%d cost=$%.4f", job, budget.calls, budget.cost_usd)
+
+
+def redraw(client: ModelClient, request: RedrawRequest) -> Iterator[AgentEvent]:
+    names = [name for name in request.layer_names if name != BACKGROUND_COLOR_LAYER]
+    yield from draw(client, accepted_scene(request), redraw_options(names))
 
 
 def redraw_options(previous_names: list[str]) -> DrawOptions:

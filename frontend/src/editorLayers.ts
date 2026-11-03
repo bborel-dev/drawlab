@@ -1,5 +1,5 @@
 import type { Canvas } from './api'
-import { layerName, svgDocument } from './layers'
+import { freeName, layerName, layerSlug, svgDocument } from './layers'
 import { fillsByFrequency, replaceColors, shiftedFamily, toneFamilies, type ToneFamily } from './tones'
 
 export type LayerPart = {
@@ -84,8 +84,14 @@ export function layerColors(layer: EditorLayer): string[] {
   return [...new Set(layer.parts.flatMap((part) => part.colors))]
 }
 
+const familiesByParts = new WeakMap<LayerPart[], ToneFamily[]>()
+
 export function layerFamilies(layer: EditorLayer): ToneFamily[] {
-  return toneFamilies(layer.parts.map((part) => part.markup))
+  const cached = familiesByParts.get(layer.parts)
+  if (cached) return cached
+  const families = toneFamilies(layer.parts.map((part) => part.markup))
+  familiesByParts.set(layer.parts, families)
+  return families
 }
 
 export function recolorFamily(layers: EditorLayer[], id: string, family: number, color: string): EditorLayer[] {
@@ -104,11 +110,8 @@ export function recolorFamily(layers: EditorLayer[], id: string, family: number,
 }
 
 export function availableLayerId(name: string, layers: EditorLayer[], current?: string): string {
-  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'layer'
   const taken = new Set(layers.map((layer) => layer.id).filter((id) => id !== current))
-  let candidate = base
-  for (let count = 2; taken.has(candidate); count += 1) candidate = `${base}-${count}`
-  return candidate
+  return freeName(layerSlug(name) || 'layer', taken)
 }
 
 export function renameLayer(layers: EditorLayer[], id: string, newId: string): EditorLayer[] {

@@ -17,19 +17,22 @@ def fit_closed_curve(points: np.ndarray, tolerance: float) -> list[Curve]:
 def fit_cubic(points: np.ndarray, left_tangent: np.ndarray, right_tangent: np.ndarray, tolerance: float) -> list[Curve]:
     if len(points) == 2:
         return [straight_curve(points[0], points[1], left_tangent, right_tangent)]
-    arc = arc_length(points)
-    parameters = chord_length_parameters(points)
+    steps = step_lengths(points)
+    arc = float(steps.sum())
+    parameters = chord_length_parameters(steps, len(points))
     basis = bernstein(parameters)
     curve = generate_curve(points, basis, left_tangent, right_tangent, arc)
-    error, split = max_error(points, curve, basis)
+    fitted = basis @ curve
+    error, split = max_error(points, fitted)
     if error < tolerance:
         return [curve]
     if error < tolerance * REPARAMETERIZE_FACTOR:
         for _ in range(MAX_REPARAMETERIZE):
-            parameters = reparameterize(points, parameters, curve, basis)
+            parameters = reparameterize(points, parameters, curve, fitted)
             basis = bernstein(parameters)
             curve = generate_curve(points, basis, left_tangent, right_tangent, arc)
-            error, split = max_error(points, curve, basis)
+            fitted = basis @ curve
+            error, split = max_error(points, fitted)
             if error < tolerance:
                 return [curve]
     split = min(max(split, 1), len(points) - 2)
@@ -50,18 +53,18 @@ def straight_curve(start: np.ndarray, end: np.ndarray, left: np.ndarray, right: 
     return np.array([start, start + left * reach, end + right * reach, end])
 
 
-def chord_length_parameters(points: np.ndarray) -> np.ndarray:
-    lengths = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(points, axis=0).T))])
-    return lengths / lengths[-1] if lengths[-1] > 0 else np.linspace(0, 1, len(points))
+def step_lengths(points: np.ndarray) -> np.ndarray:
+    return np.hypot(*np.diff(points, axis=0).T)
+
+
+def chord_length_parameters(steps: np.ndarray, count: int) -> np.ndarray:
+    lengths = np.concatenate([[0.0], np.cumsum(steps)])
+    return lengths / lengths[-1] if lengths[-1] > 0 else np.linspace(0, 1, count)
 
 
 def bernstein(parameters: np.ndarray) -> np.ndarray:
     inverse = 1 - parameters
     return np.stack([inverse**3, 3 * parameters * inverse**2, 3 * parameters**2 * inverse, parameters**3], axis=1)
-
-
-def arc_length(points: np.ndarray) -> float:
-    return float(np.hypot(*np.diff(points, axis=0).T).sum())
 
 
 def generate_curve(points: np.ndarray, basis: np.ndarray, left: np.ndarray, right: np.ndarray, arc: float) -> Curve:
@@ -86,22 +89,21 @@ def generate_curve(points: np.ndarray, basis: np.ndarray, left: np.ndarray, righ
     return np.array([start, start + left * alpha_left, end + right * alpha_right, end])
 
 
-def max_error(points: np.ndarray, curve: Curve, basis: np.ndarray) -> tuple[float, int]:
-    distances = np.hypot(*(basis @ curve - points).T)
+def max_error(points: np.ndarray, fitted: np.ndarray) -> tuple[float, int]:
+    distances = np.hypot(*(fitted - points).T)
     split = int(distances[1:-1].argmax()) + 1
     return float(distances[split]), split
 
 
-def reparameterize(points: np.ndarray, parameters: np.ndarray, curve: Curve, basis: np.ndarray) -> np.ndarray:
+def reparameterize(points: np.ndarray, parameters: np.ndarray, curve: Curve, fitted: np.ndarray) -> np.ndarray:
     first = 3 * np.diff(curve, axis=0)
     second = 2 * np.diff(first, axis=0)
     inverse = 1 - parameters
-    value = basis @ curve
     derivative = (
         (inverse**2)[:, None] * first[0] + (2 * parameters * inverse)[:, None] * first[1] + (parameters**2)[:, None] * first[2]
     )
     second_derivative = inverse[:, None] * second[0] + parameters[:, None] * second[1]
-    difference = value - points
+    difference = fitted - points
     numerator = (difference * derivative).sum(axis=1)
     denominator = (derivative * derivative).sum(axis=1) + (difference * second_derivative).sum(axis=1)
     step = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=np.abs(denominator) > 1e-12)

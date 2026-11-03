@@ -8,7 +8,7 @@ from openai import APIError
 from PIL import Image, ImageDraw, ImageFont
 
 from app.agents.art_director import ArtDirection, Element
-from app.agents.cutter import Cut
+from app.agents.cutter import Cut, object_elements
 from app.budget import BudgetExceededError
 from app.images import downscale_for_models, to_data_url
 from app.masks import parse_mask_records, render_mask
@@ -85,35 +85,39 @@ class MaskCheck:
 
 
 def check_masks(client: ModelClient, image: Image.Image, direction: ArtDirection, cuts: list[Cut]) -> MaskCheck:
+    model_image = downscale_for_models(image)
+    image_url = to_data_url(model_image)
     try:
-        fixes = review_cuts(client, image, direction, cuts)
-        return MaskCheck(repair_cuts(client, image, cuts, fixes), fixes)
+        fixes = review_cuts(client, model_image, image_url, direction, cuts)
+        return MaskCheck(repair_cuts(client, model_image.size, image_url, cuts, fixes), fixes)
     except (BudgetExceededError, APIError, ValueError, KeyError) as error:
         logger.warning("mask review skipped, keeping the masks as cut: %s", error)
         return MaskCheck(cuts, [])
 
 
-def review_cuts(client: ModelClient, image: Image.Image, direction: ArtDirection, cuts: list[Cut]) -> list[MaskFix]:
-    model_image = downscale_for_models(image)
-    elements = [element for element in direction.elements if element.kind == "object"]
+def review_cuts(
+    client: ModelClient, model_image: Image.Image, image_url: str, direction: ArtDirection, cuts: list[Cut]
+) -> list[MaskFix]:
+    elements = object_elements(direction)
     prompt = REVIEWER_PROMPT.format(elements=element_list(elements, cuts))
     overlay = draw_overlay(model_image, elements, cuts)
-    raw = client.ask_for_json(prompt, [to_data_url(model_image), to_data_url(overlay)], "MaskReview", REVIEW_SCHEMA)
+    raw = client.ask_for_json(prompt, [image_url, to_data_url(overlay)], "MaskReview", REVIEW_SCHEMA)
     return parse_fixes(raw, elements, model_image.size)
 
 
-def repair_cuts(client: ModelClient, image: Image.Image, cuts: list[Cut], fixes: list[MaskFix]) -> list[Cut]:
-    model_image = downscale_for_models(image)
+def repair_cuts(
+    client: ModelClient, size: tuple[int, int], image_url: str, cuts: list[Cut], fixes: list[MaskFix]
+) -> list[Cut]:
     repaired = {cut.element_name: cut for cut in cuts}
     batch = fixes[:MAX_BOXES_PER_CALL]
     if not batch:
         return cuts
     objects = [PromptObject(id=index + 1, prompts=[FramePrompt(frame=0, box=fix.box)]) for index, fix in enumerate(batch)]
-    prompt = build_object_prompt(size=model_image.size, objects=objects)
-    records = parse_mask_records(client.segment(to_data_url(model_image), prompt))
+    prompt = build_object_prompt(size=size, objects=objects)
+    records = parse_mask_records(client.segment(image_url, prompt))
     for record in records:
         fix = batch[int(record.object_id) - 1] if record.object_id.isdigit() else None
-        mask = render_mask(record, model_image.size)
+        mask = render_mask(record, size)
         if fix and fix.element_name in repaired and mask.getbbox():
             repaired[fix.element_name] = replace(repaired[fix.element_name], prompt="box", mask=mask, copies=())
     return [repaired[cut.element_name] for cut in cuts]

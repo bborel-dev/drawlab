@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from app.masks import convex_hull_mask
 from app.nearest_fill import fill_from_nearest
 from app.tracing import trace_paths
 from app.unknown_objects import COLOR_DISTANCE, tone_distances
@@ -72,14 +73,6 @@ def hidden_object_region(pixel_owner: np.ndarray, layer: int) -> np.ndarray:
     kept = (enclosing >= HIDDEN_ENCLOSURE * np.maximum(touching, 1)) & (areas >= MIN_HIDDEN_SHARE * hidden.size)
     kept[0] = False
     return kept[parts]
-
-
-def convex_hull_mask(visible: np.ndarray) -> np.ndarray:
-    mask = np.zeros(visible.shape, dtype=np.uint8)
-    points = cv2.findNonZero(visible.astype(np.uint8))
-    if points is not None:
-        cv2.fillConvexPoly(mask, cv2.convexHull(points), 1)
-    return mask.astype(bool)
 
 
 def ring_labels(parts: np.ndarray, hidden: np.ndarray) -> np.ndarray:

@@ -27,7 +27,8 @@ There are two ways to answer.
    Write one precise English instruction: say exactly what changes and where, in terms of what is visible in the image.
    Ask to keep the exact same composition, framing, characters, poses, objects, flat illustration style,
    outlines, palette and lighting for everything else, and to keep the scene natural and coherent.
-   Read the request in context: in French, "verres" can mean the lenses of glasses, not a drinking glass.
+   Read every word in the context of the drawing and of the designer's language: when a word can name either
+   a separate object or a part of something visible, choose the meaning that fits what the drawing shows.
 2. operations, only for requests that hide, show, move, fade or reorder existing layers without changing how they look:
    - hide, show: set layer.
    - move: set layer, dx and dy as fractions of the drawing width and height (positive moves right and down).

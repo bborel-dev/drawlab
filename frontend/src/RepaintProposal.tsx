@@ -61,7 +61,7 @@ function RepaintProposal({ proposal, currentSvg, onChoose }: RepaintProposalProp
             value={instruction}
             disabled={proposal.busy}
             maxLength={MAX_INSTRUCTION_LENGTH}
-            placeholder="Not quite? Retouch it: “make the cap red”"
+            placeholder="Not quite? Retouch it: “make the colors warmer”"
             aria-label="Retouch the proposal"
             onChange={(event) => setInstruction(event.target.value)}
           />

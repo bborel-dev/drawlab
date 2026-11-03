@@ -47,6 +47,14 @@ def mask_outline(mask: Image.Image) -> str:
     return "".join(contour_path(contour) for contour in simplified if len(contour) >= 3)
 
 
+def convex_hull_mask(visible: np.ndarray) -> np.ndarray:
+    mask = np.zeros(visible.shape, dtype=np.uint8)
+    points = cv2.findNonZero(visible.astype(np.uint8))
+    if points is not None:
+        cv2.fillConvexPoly(mask, cv2.convexHull(points), 1)
+    return mask.astype(bool)
+
+
 def contour_path(contour: np.ndarray) -> str:
     points = [f"{x} {y}" for x, y in contour.reshape(-1, 2)]
     return "M" + "L".join(points) + "Z"
