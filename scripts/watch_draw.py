@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-DRAW_URL = "http://127.0.0.1:8000/api/draw"
+DRAW_URL = "http://127.0.0.1:8000/draw"
 
 
 def multipart_body(image_path: Path, boundary: str) -> bytes:
