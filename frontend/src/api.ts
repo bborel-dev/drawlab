@@ -34,6 +34,37 @@ export type EditRequest = {
 
 const EVENT_SEPARATOR = '\n\n'
 const DATA_PREFIX = 'data: '
+const API_URL = (import.meta.env.VITE_API_URL ?? '/api').replace(/\/+$/, '')
+
+export class ApiError extends Error {}
+
+export type Allowance = {
+  left: number
+  limit: number
+}
+
+export type Quota = {
+  conversions: Allowance
+  edits: Allowance
+  open: boolean
+}
+
+const quotaListeners = new Set<() => void>()
+
+export function onQuotaChange(listener: () => void): () => void {
+  quotaListeners.add(listener)
+  return () => quotaListeners.delete(listener)
+}
+
+function quotaChanged(): void {
+  quotaListeners.forEach((listener) => listener())
+}
+
+export async function fetchQuota(signal: AbortSignal): Promise<Quota> {
+  const response = await fetch(`${API_URL}/quota`, { signal })
+  if (!response.ok) throw await failure(response, 'Quota failed')
+  return (await response.json()) as Quota
+}
 
 export type ProposalRequest = { image_prompt: string } & ({ svg: string } | { image: string })
 
@@ -51,13 +82,14 @@ export async function streamDrawing(
 ): Promise<void> {
   const body = new FormData()
   body.append('image', image)
-  const response = await fetch('/api/draw', { method: 'POST', body, signal })
+  const response = await fetch(`${API_URL}/draw`, { method: 'POST', body, signal })
+  quotaChanged()
   await readEvents(response, onEvent)
 }
 
 export async function requestProposal(body: ProposalRequest, signal: AbortSignal): Promise<string> {
-  const response = await postJson('/api/repaint/proposal', body, signal)
-  if (!response.ok) throw new Error(`Repaint proposal failed (${response.status})`)
+  const response = await postJson('/repaint/proposal', body, signal)
+  if (!response.ok) throw await failure(response, 'Repaint proposal failed')
   return ((await response.json()) as { image: string }).image
 }
 
@@ -66,11 +98,11 @@ export async function streamRepaint(
   onEvent: (event: AgentEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  await readEvents(await postJson('/api/repaint', body, signal), onEvent)
+  await readEvents(await postJson('/repaint', body, signal), onEvent)
 }
 
-function postJson(url: string, body: unknown, signal: AbortSignal): Promise<Response> {
-  return fetch(url, {
+function postJson(path: string, body: unknown, signal: AbortSignal): Promise<Response> {
+  return fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -79,9 +111,7 @@ function postJson(url: string, body: unknown, signal: AbortSignal): Promise<Resp
 }
 
 async function readEvents(response: Response, onEvent: (event: AgentEvent) => void): Promise<void> {
-  if (!response.ok || !response.body) {
-    throw new Error(`Drawing failed (${response.status})`)
-  }
+  if (!response.ok || !response.body) throw await failure(response, 'Drawing failed')
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
   let buffer = ''
   for (;;) {
@@ -99,7 +129,16 @@ function parseEvent(message: string): AgentEvent {
 }
 
 export async function requestEdit(body: EditRequest, signal: AbortSignal): Promise<EditPlan> {
-  const response = await postJson('/api/edit', body, signal)
-  if (!response.ok) throw new Error(`Edit failed (${response.status})`)
+  const response = await postJson('/edit', body, signal)
+  quotaChanged()
+  if (!response.ok) throw await failure(response, 'Edit failed')
   return (await response.json()) as EditPlan
+}
+
+async function failure(response: Response, fallback: string): Promise<ApiError> {
+  const detail = await response
+    .json()
+    .then((body: { detail?: unknown }) => body.detail)
+    .catch(() => undefined)
+  return new ApiError(typeof detail === 'string' ? detail : `${fallback} (${response.status})`)
 }

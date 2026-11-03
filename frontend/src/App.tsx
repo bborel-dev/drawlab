@@ -4,6 +4,7 @@ import ConverterPage from './ConverterPage'
 import EditorPage from './EditorPage'
 import EditorStart from './EditorStart'
 import HackathonBadge from './HackathonBadge'
+import QuotaBanner from './QuotaBanner'
 import type { Drawing } from './layers'
 import { useRecentDrawings } from './recentDrawings'
 import SiteHeader, { type Page } from './SiteHeader'
@@ -48,6 +49,7 @@ function App() {
   return (
     <div className={page === 'editor' ? 'app app-fixed' : 'app'}>
       <Backdrop />
+      <QuotaBanner />
       {!editing && (
         <>
           <SiteHeader page={page} onNavigate={setPage} />

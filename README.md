@@ -87,6 +87,8 @@ Every agent event is streamed to the browser over Server-Sent Events, which is w
 There is no spending cap on the platform, so the code protects the credits:
 
 - A maximum number of API calls per job (`MAX_API_CALLS_PER_JOB`).
+- A daily spending cap for the whole server (`MAX_DAILY_SPEND_USD`): once it is reached, every model call is refused until the next day (UTC).
+- Each visitor gets 5 conversions and 5 AI edits per 24 hours, shown in a banner at the bottom of the page, and the server draws one image at a time.
 - Images are downscaled before they are sent to the models.
 - Every call is logged with its model, token usage and cost, and every pipeline stage with its duration.
 - `MOCK_AGENTS=true` runs the whole pipeline on recorded responses, without calling the API.
@@ -121,6 +123,12 @@ npm run dev
 | `MODEL_API_BASE_URL` | `https://api.meta.ai/v1` | API endpoint. |
 | `MAX_API_CALLS_PER_JOB` | `60` | Hard limit of model calls per drawing or edit. |
 | `MOCK_AGENTS` | `true` | Use recorded responses instead of the real models. |
+| `MAX_DAILY_SPEND_USD` | `5` | Server-wide spending cap per UTC day. |
+| `MAX_CONVERSIONS_PER_VISITOR` | `5` | Image conversions allowed per visitor over 24 hours. |
+| `MAX_EDITS_PER_VISITOR` | `5` | AI edits allowed per visitor over 24 hours. |
+| `MAX_PROPOSALS_PER_VISITOR` | `30` | Muse Image proposals and retouches allowed per visitor over 24 hours. |
+| `ALLOWED_ORIGINS` | empty | Comma-separated frontend origins allowed to call the backend (CORS), such as `https://drawlab.vercel.app`. |
+| `VITE_API_URL` | `/api` | Frontend only: backend URL when the frontend and the backend are hosted apart. |
 
 ## Project structure
 
@@ -128,7 +136,8 @@ npm run dev
 backend/app/
   agents/        Art Director, Cutter, Mask reviewer, Completer, Illustrator, Edit Director
   pipeline.py    Runs the agents and streams their events
-  main.py        FastAPI routes: /draw, /edit, /repaint/proposal, /repaint
+  main.py        FastAPI routes: /draw, /edit, /repaint/proposal, /repaint, /quota
+  guardrails.py  Visitor quotas, single drawing slot and daily spending cap
 frontend/src/    React app: converter, drawing animation, layer editor, talk bar
 scripts/         Benchmarks and tools to try the agents on sample images
 docs/images/     Screenshots and demo

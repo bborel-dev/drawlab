@@ -65,7 +65,7 @@ class ProposalError(RuntimeError):
 
 
 def run_drawing_job(image: Image.Image, settings: Settings) -> Iterator[AgentEvent]:
-    budget = CallBudget(max_calls=settings.max_api_calls_per_job)
+    budget = job_budget(settings)
     client = None if settings.mock_agents else ModelClient(settings, budget)
     yield from guarded("drawing", draw(client, image), budget)
 
@@ -73,7 +73,7 @@ def run_drawing_job(image: Image.Image, settings: Settings) -> Iterator[AgentEve
 def run_edit_job(request: EditRequest, settings: Settings) -> EditPlan:
     if settings.mock_agents:
         return mock_plan_edits(request)
-    budget = CallBudget(max_calls=settings.max_api_calls_per_job)
+    budget = job_budget(settings)
     try:
         return plan_edits(ModelClient(settings, budget), request)
     except (BudgetExceededError, APIError, ValueError, KeyError):
@@ -86,7 +86,7 @@ def run_edit_job(request: EditRequest, settings: Settings) -> EditPlan:
 def run_proposal_job(request: ProposalRequest, settings: Settings) -> str:
     if settings.mock_agents:
         raise ProposalError("Repainting needs the real models, set MOCK_AGENTS=false")
-    budget = CallBudget(max_calls=settings.max_api_calls_per_job)
+    budget = job_budget(settings)
     started = time.monotonic()
     try:
         return to_data_url(proposed_scene(ModelClient(settings, budget), request))
@@ -102,8 +102,12 @@ def run_repaint_job(request: RedrawRequest, settings: Settings) -> Iterator[Agen
     if settings.mock_agents:
         yield AgentEvent("art-director", "error", "Repainting needs the real models, set MOCK_AGENTS=false")
         return
-    budget = CallBudget(max_calls=settings.max_api_calls_per_job)
+    budget = job_budget(settings)
     yield from guarded("repainting", redraw(ModelClient(settings, budget), request), budget)
+
+
+def job_budget(settings: Settings) -> CallBudget:
+    return CallBudget(max_calls=settings.max_api_calls_per_job, daily_limit_usd=settings.max_daily_spend_usd)
 
 
 def guarded(job: str, events: Iterator[AgentEvent], budget: CallBudget) -> Iterator[AgentEvent]:

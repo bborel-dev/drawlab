@@ -64,8 +64,3 @@ def svg_document(size: tuple[int, int], body: str) -> str:
         f'<svg version="1.1" xmlns="http://www.w3.org/2000/svg" '
         f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">{body}</svg>'
     )
-
-
-def trace_to_svg(image: Image.Image) -> str:
-    trace_image = downscale_for_tracing(image)
-    return svg_document(trace_image.size, "".join(trace_paths(trace_image)))

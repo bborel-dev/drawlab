@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
+import { ApiError } from './api'
 import { SendIcon, StopIcon } from './icons'
 import { expectedDuration, formatDuration, isTimed, recordDuration, type TalkStage } from './talkTiming'
 
@@ -65,7 +66,7 @@ function TalkBar({ onAsk, onCancel }: TalkBarProps) {
       finishStage()
       setPrompt('')
     } catch (error) {
-      setAnswer({ reply: isAbort(error) ? CANCELLED_REPLY : FAILURE_REPLY, changed: [] })
+      setAnswer({ reply: failureReply(error), changed: [] })
     } finally {
       changeRun(null)
     }
@@ -155,8 +156,9 @@ function useNow(): number {
   return now
 }
 
-function isAbort(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError'
+function failureReply(error: unknown): string {
+  if (error instanceof DOMException && error.name === 'AbortError') return CANCELLED_REPLY
+  return error instanceof ApiError ? error.message : FAILURE_REPLY
 }
 
 export default TalkBar

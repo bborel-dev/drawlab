@@ -3,16 +3,25 @@ import logging
 from dataclasses import asdict
 from typing import Iterator
 
-from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import Response, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from PIL import Image, UnidentifiedImageError
 
 from app.agents.edit_director import EditRequest
-from app.config import load_settings
+from app.config import Settings, load_settings
+from app.guardrails import (
+    DRAWING_SLOT,
+    admit_conversion,
+    admit_edit,
+    admit_proposal,
+    admit_repaint,
+    holding_slot,
+    visitor_quota,
+)
 from app.images import open_image
 from app.pipeline import AgentEvent, ProposalError, run_drawing_job, run_edit_job, run_proposal_job, run_repaint_job
 from app.scene_repaint import ProposalRequest, RedrawRequest
-from app.tracing import trace_to_svg
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
@@ -27,38 +36,61 @@ MAX_IMAGE_DATA_CHARS = 20_000_000
 MAX_CANVAS_SIDE = 8192
 
 
-@app.post("/trace")
-async def trace(image: UploadFile) -> Response:
-    svg = trace_to_svg(await read_upload(image))
-    return Response(content=svg, media_type="image/svg+xml")
+def allow_origins(settings: Settings) -> None:
+    if settings.allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.allowed_origins),
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+        )
+
+
+allow_origins(load_settings())
+
+
+@app.get("/quota")
+def quota(request: Request) -> dict[str, object]:
+    return asdict(visitor_quota(request, load_settings()))
 
 
 @app.post("/draw")
-async def draw(image: UploadFile) -> StreamingResponse:
-    events = run_drawing_job(await read_upload(image), load_settings())
-    return StreamingResponse(to_server_sent_events(events), media_type="text/event-stream", headers=SSE_HEADERS)
+async def draw(request: Request, image: UploadFile) -> StreamingResponse:
+    settings = load_settings()
+    token = admit_conversion(request, settings)
+    try:
+        picture = await read_upload(image)
+    except HTTPException:
+        DRAWING_SLOT.release(token)
+        raise
+    return event_stream(holding_slot(token, run_drawing_job(picture, settings)))
 
 
 @app.post("/edit")
-def edit(request: EditRequest) -> dict[str, object]:
-    check_edit_request(request)
-    return asdict(run_edit_job(request, load_settings()))
+def edit(request: Request, body: EditRequest) -> dict[str, object]:
+    check_edit_request(body)
+    settings = load_settings()
+    admit_edit(request, settings)
+    return asdict(run_edit_job(body, settings))
 
 
 @app.post("/repaint/proposal")
-def repaint_proposal(request: ProposalRequest) -> dict[str, str]:
-    check_proposal_request(request)
+def repaint_proposal(request: Request, body: ProposalRequest) -> dict[str, str]:
+    check_proposal_request(body)
+    settings = load_settings()
+    admit_proposal(request, settings)
     try:
-        return {"image": run_proposal_job(request, load_settings())}
+        return {"image": run_proposal_job(body, settings)}
     except ProposalError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @app.post("/repaint")
-def repaint(request: RedrawRequest) -> StreamingResponse:
-    check_redraw_request(request)
-    events = run_repaint_job(request, load_settings())
-    return StreamingResponse(to_server_sent_events(events), media_type="text/event-stream", headers=SSE_HEADERS)
+def repaint(request: Request, body: RedrawRequest) -> StreamingResponse:
+    check_redraw_request(body)
+    settings = load_settings()
+    token = admit_repaint(request, settings)
+    return event_stream(holding_slot(token, run_repaint_job(body, settings)))
 
 
 def check_proposal_request(request: ProposalRequest) -> None:
@@ -89,6 +121,10 @@ async def read_upload(upload: UploadFile) -> Image.Image:
         return open_image(await upload.read())
     except UnidentifiedImageError as error:
         raise HTTPException(status_code=400, detail="Unsupported image format") from error
+
+
+def event_stream(events: Iterator[AgentEvent]) -> StreamingResponse:
+    return StreamingResponse(to_server_sent_events(events), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 def to_server_sent_events(events: Iterator[AgentEvent]) -> Iterator[str]:
