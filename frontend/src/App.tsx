@@ -22,6 +22,7 @@ function App() {
   const [page, setPage] = useState<Page>('convert')
   const [open, setOpen] = useState<OpenDrawing | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [queuedImage, setQueuedImage] = useState<File | null>(null)
   const recents = useRecentDrawings()
   const openRecent = recents.items.find((item) => item.id === open?.id) ?? null
   const editing = page === 'editor' && openRecent !== null
@@ -34,6 +35,11 @@ function App() {
 
   function editDrawing(drawing: Drawing) {
     openDrawing(recents.add(drawing))
+  }
+
+  function convertExample(file: File) {
+    setQueuedImage(file)
+    setPage('convert')
   }
 
   async function importFile(file: File) {
@@ -57,7 +63,7 @@ function App() {
         </>
       )}
       <div hidden={page !== 'convert'}>
-        <ConverterPage onDrawn={recents.add} onEdit={editDrawing} />
+        <ConverterPage onDrawn={recents.add} onEdit={editDrawing} queuedImage={queuedImage} />
       </div>
       {page === 'editor' && !openRecent && (
         <EditorStart
@@ -67,6 +73,7 @@ function App() {
           onRemoveRecent={recents.remove}
           onImport={importFile}
           onConvert={() => setPage('convert')}
+          onConvertExample={convertExample}
         />
       )}
       {open && openRecent && (

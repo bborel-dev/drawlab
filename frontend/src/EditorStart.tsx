@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import DropZone from './DropZone'
+import ExampleImages from './ExampleImages'
 import { svgDocument, type Drawing } from './layers'
 import type { RecentDrawing } from './recentDrawings'
 
@@ -10,6 +11,7 @@ type EditorStartProps = {
   onRemoveRecent: (id: string) => void
   onImport: (file: File) => void
   onConvert: () => void
+  onConvertExample: (file: File) => void
 }
 
 const SVG_TYPES = 'image/svg+xml,.svg'
@@ -20,9 +22,18 @@ const TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['minute', 60_000],
 ]
 
-function EditorStart({ recents, error, onOpenRecent, onRemoveRecent, onImport, onConvert }: EditorStartProps) {
+function EditorStart({
+  recents,
+  error,
+  onOpenRecent,
+  onRemoveRecent,
+  onImport,
+  onConvert,
+  onConvertExample,
+}: EditorStartProps) {
+  const isEmpty = recents.length === 0
   return (
-    <main className="editor-start glass">
+    <main className={`editor-start glass${isEmpty ? ' editor-start-empty' : ''}`}>
       <div className="converter-row">
         <h1 className="start-title">Your drawings</h1>
         <button type="button" className="button button-secondary" onClick={onConvert}>
@@ -34,7 +45,7 @@ function EditorStart({ recents, error, onOpenRecent, onRemoveRecent, onImport, o
           {error}
         </p>
       )}
-      {recents.length > 0 ? (
+      {!isEmpty ? (
         <RecentStrip>
           {recents.map((recent) => (
             <RecentCard
@@ -57,6 +68,7 @@ function EditorStart({ recents, error, onOpenRecent, onRemoveRecent, onImport, o
         accept={SVG_TYPES}
         label="Open an SVG"
       />
+      {isEmpty && <ExampleImages onFile={onConvertExample} title="No SVG yet? Convert an example" />}
     </main>
   )
 }

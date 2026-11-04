@@ -6,6 +6,7 @@ import DrawingCanvas from './DrawingCanvas'
 import { drawingProgress } from './drawingProgress'
 import DrawingStatus from './DrawingStatus'
 import DropZone from './DropZone'
+import ExampleImages from './ExampleImages'
 import { downloadSvg, svgDocument, svgFileName, type Drawing } from './layers'
 import SegmentationOverlay from './SegmentationOverlay'
 import ViewSwitch, { type CompareView } from './ViewSwitch'
@@ -23,9 +24,10 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 type ConverterPageProps = {
   onDrawn: (drawing: Drawing) => void
   onEdit: (drawing: Drawing) => void
+  queuedImage: File | null
 }
 
-function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
+function ConverterPage({ onDrawn, onEdit, queuedImage }: ConverterPageProps) {
   const [phase, setPhase] = useState<Phase>('empty')
   const [source, setSource] = useState<Source | null>(null)
   const [canvas, setCanvas] = useState<Canvas | null>(null)
@@ -44,6 +46,7 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
   const [error, setError] = useState<string | null>(null)
   const startedAtRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
+  const takenImageRef = useRef<File | null>(null)
 
   useEffect(() => {
     if (phase !== 'drawing' || !streamDone || drawingEndsAt === null) return
@@ -68,6 +71,12 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
     if (!source) return
     return () => URL.revokeObjectURL(source.url)
   }, [source])
+
+  useEffect(() => {
+    if (!queuedImage || takenImageRef.current === queuedImage) return
+    takenImageRef.current = queuedImage
+    void startDrawing(queuedImage)
+  }, [queuedImage])
 
   const sourceName = source?.name
   const drawing = useMemo<Drawing | null>(
@@ -179,6 +188,7 @@ function ConverterPage({ onDrawn, onEdit }: ConverterPageProps) {
           </p>
         )}
         <DropZone onFile={startDrawing} />
+        <ExampleImages onFile={startDrawing} />
       </main>
     )
   }
