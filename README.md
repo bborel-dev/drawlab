@@ -144,9 +144,9 @@ scripts/         Benchmarks and tools to try the agents on sample images
 docs/            Screenshots, demo GIF and presentation video
 ```
 
-## What we built and what we reused
+## What I built and what I reused
 
-**What we built** during the hackathon:
+**What I built** during the hackathon:
 
 - The six agents and the pipeline that chains them, with streaming over SSE.
 - The layering logic: element naming, mask matching, hidden part completion, one layer per element.
@@ -154,7 +154,7 @@ docs/            Screenshots, demo GIF and presentation video
 - The whole web app: converter with example images, stroke-by-stroke animation engine, before and after comparison, drawings gallery, layer editor, talk bar and proposal review.
 - The budget guardrails and the mock mode.
 
-**What we reused**:
+**What I reused**:
 
 - Meta models: Muse Spark, SAM 3.1 and Muse Image, through the Meta Model API.
 - Backend libraries: FastAPI, Uvicorn, Pillow, NumPy, OpenCV, vtracer, resvg-py, the OpenAI Python SDK (the API is compatible with it), meta-sam-parser, python-dotenv and python-multipart.
@@ -168,12 +168,12 @@ docs/            Screenshots, demo GIF and presentation video
 
 ## Hackathon
 
-Built for the **Meta Global AI Developer Hackathon 2026**, Indie Developer track, theme *Build for Your World*.
-Development started on October 26, 2026 at 2:30 PM ET.
+I built Drawlab solo for the **Meta Global AI Developer Hackathon 2026**, Indie Developer track, theme *Build for Your World*.
+I started development on October 26, 2026 at 2:30 PM ET.
 
 ## Credits
 
-All images used in this repository are original or free-licensed. No brand assets or copyrighted characters are used.
+I only used original or free-licensed images in this repository, with no brand assets or copyrighted characters.
 
 - Mountain landscape (screenshots): illustration by kitosonita on Pixabay.
 - Potted plant (`frontend/public/examples/flower.jpg`): illustration by biancavandijk on Pixabay (image 10265477).
