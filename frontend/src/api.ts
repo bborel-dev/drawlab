@@ -2,7 +2,7 @@ import type { EditPlan, LayerSummary } from './drawingEdits'
 
 export type AgentName = 'art-director' | 'cutter' | 'completer' | 'illustrator'
 
-export type AgentStatus = 'working' | 'done' | 'error'
+type AgentStatus = 'working' | 'done' | 'error'
 
 export type Canvas = {
   width: number
@@ -25,7 +25,7 @@ export type AgentEvent = {
   mask: MaskOutline | null
 }
 
-export type EditRequest = {
+type EditRequest = {
   prompt: string
   svg: string
   layers: LayerSummary[]
@@ -66,9 +66,9 @@ export async function fetchQuota(signal: AbortSignal): Promise<Quota> {
   return (await response.json()) as Quota
 }
 
-export type ProposalRequest = { image_prompt: string } & ({ svg: string } | { image: string })
+type ProposalRequest = { image_prompt: string } & ({ svg: string } | { image: string })
 
-export type RedrawRequest = {
+type RedrawRequest = {
   image: string
   width: number
   height: number

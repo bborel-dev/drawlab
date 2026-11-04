@@ -1,7 +1,7 @@
 import { agentLabel, AGENTS, workingAgent, type AgentState, type AgentStates } from './agents'
 import type { Step, StepState } from './DrawingStatus'
 
-export type DrawingProgress = {
+type DrawingProgress = {
   agent: string
   action: string
   detail: string

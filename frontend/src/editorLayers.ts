@@ -21,7 +21,7 @@ export type EditorLayer = {
 
 export type LayerPatch = Partial<Pick<EditorLayer, 'visible' | 'x' | 'y' | 'opacity'>>
 
-export const BACKGROUND_COLOR_LAYER = 'background-color'
+const BACKGROUND_COLOR_LAYER = 'background-color'
 const DEFAULT_BACKGROUND = '#FFFFFF'
 const DUPLICATE_OFFSET = 16
 

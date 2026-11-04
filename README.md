@@ -8,8 +8,7 @@
 
 Drop an image. A team of AI agents redraws it as vectors, live, stroke by stroke, and hands you a clean SVG whose layers have real names (`man-figure`, `cafe-storefront`, `lakeside-cabin`), not `path47`. Then edit the drawing by hand or just ask for a change in plain words.
 
-<!-- Demo video: add the link here -->
-<!-- Live app: add the URL here -->
+[![Watch the presentation on YouTube](https://img.shields.io/badge/Watch_the_presentation-YouTube-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=7eI62Y7cO3s)
 
 ![Drawlab redraws an image stroke by stroke, then edits it with Muse Spark and Muse Image](docs/images/drawlab-demo.gif)
 
@@ -21,7 +20,7 @@ Drawlab understands the image first, then draws it the way an illustrator would:
 
 ## How it works
 
-1. **Drop an image** (PNG, JPG or WebP).
+1. **Drop an image** (PNG, JPG or WebP), or pick one of the two example images.
 
    ![Home page](docs/images/home.png)
 
@@ -138,9 +137,11 @@ backend/app/
   pipeline.py    Runs the agents and streams their events
   main.py        FastAPI routes: /draw, /edit, /repaint/proposal, /repaint, /quota
   guardrails.py  Visitor quotas, single drawing slot and daily spending cap
-frontend/src/    React app: converter, drawing animation, layer editor, talk bar
+frontend/
+  src/           React app: converter, drawing animation, layer editor, talk bar
+  public/        Logo and the two example images
 scripts/         Benchmarks and tools to try the agents on sample images
-docs/images/     Screenshots and demo
+docs/            Screenshots, demo GIF and presentation video
 ```
 
 ## What we built and what we reused
@@ -150,7 +151,7 @@ docs/images/     Screenshots and demo
 - The six agents and the pipeline that chains them, with streaming over SSE.
 - The layering logic: element naming, mask matching, hidden part completion, one layer per element.
 - The Illustrator algorithms on top of the tracer: ink detection, region ownership, smoothing, gap sealing.
-- The whole web app: converter, stroke-by-stroke animation engine, before and after comparison, drawings gallery, layer editor, talk bar and proposal review.
+- The whole web app: converter with example images, stroke-by-stroke animation engine, before and after comparison, drawings gallery, layer editor, talk bar and proposal review.
 - The budget guardrails and the mock mode.
 
 **What we reused**:
@@ -174,7 +175,9 @@ Development started on October 26, 2026 at 2:30 PM ET.
 
 All images used in this repository are original or free-licensed. No brand assets or copyrighted characters are used.
 
-- Mountain landscape: illustration by kitosonita on Pixabay.
+- Mountain landscape (screenshots): illustration by kitosonita on Pixabay.
+- Potted plant (`frontend/public/examples/flower.jpg`): illustration by biancavandijk on Pixabay (image 10265477).
+- Dancing couple (`frontend/public/examples/dance.jpg`): illustration by whitetopaz on Pixabay (image 10452282).
 
 ## License
 

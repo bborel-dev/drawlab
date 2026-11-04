@@ -7,7 +7,7 @@ export type RecentDrawing = {
   drawing: Drawing
 }
 
-export type RecentDrawings = {
+type RecentDrawings = {
   items: RecentDrawing[]
   add: (drawing: Drawing) => string
   saveLayers: (id: string, layers: string[]) => void

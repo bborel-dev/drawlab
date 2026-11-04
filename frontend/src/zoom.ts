@@ -9,14 +9,14 @@ export type View = {
   y: number
 }
 
-export type Offset = {
+type Offset = {
   x: number
   y: number
 }
 
 export const FIT_VIEW: View = { zoom: 1, x: 0, y: 0 }
 
-export function clampZoom(zoom: number): number {
+function clampZoom(zoom: number): number {
   return Math.min(Math.max(zoom, MIN_ZOOM), MAX_ZOOM)
 }
 

@@ -1,7 +1,7 @@
 import type { Canvas } from './api'
 import { freeName, layerSlug, type Drawing } from './layers'
 
-export type ImportedSvg = {
+type ImportedSvg = {
   drawing: Drawing
   drawnByDrawlab: boolean
 }

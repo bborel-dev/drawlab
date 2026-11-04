@@ -2,9 +2,9 @@ import type { Canvas } from './api'
 import { moveLayerTo, type EditorLayer } from './editorLayers'
 import { familyTones, toneFamilies, type Tone } from './tones'
 
-export type EditOp = 'hide' | 'show' | 'move' | 'opacity' | 'forward' | 'backward' | 'front' | 'back'
+type EditOp = 'hide' | 'show' | 'move' | 'opacity' | 'forward' | 'backward' | 'front' | 'back'
 
-export type EditOperation = {
+type EditOperation = {
   op: EditOp
   layer: string
   dx: number
