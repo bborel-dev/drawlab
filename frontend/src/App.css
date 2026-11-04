@@ -363,7 +363,7 @@
   inset: -100% -70% 0;
   content: '';
   background: linear-gradient(90deg, #3b82f6, #22d3ee, #a855f7, #ec4899, #fb923c, #a855f7, #3b82f6);
-  opacity: 0.55;
+  opacity: 0.11;
   transform: perspective(800px) rotateX(52deg);
   transform-origin: center bottom;
   -webkit-mask-image:
@@ -391,11 +391,6 @@
 
 .editor::before {
   opacity: 0.09;
-}
-
-.converter-empty::before,
-.editor-start::before {
-  opacity: 0.11;
 }
 
 .converter-empty {

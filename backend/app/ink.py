@@ -8,7 +8,7 @@ from app.nearest_fill import fill_from_nearest
 BACKGROUND_KERNEL_RATIO = 0.009
 CORE_KERNEL_RATIO = 0.004
 MIN_KERNEL = 5
-INK_MAX_LUMA = 110
+INK_MAX_LUMA = 80
 INK_MIN_CONTRAST = 20
 INK_RELATIVE_CONTRAST = 0.4
 INK_CORE_SHARE = 0.5
@@ -74,9 +74,9 @@ def find_ink(image: Image.Image, reach: int) -> np.ndarray:
     candidate = (
         (luma < INK_MAX_LUMA) & (contrast > INK_MIN_CONTRAST) & (contrast > background * INK_RELATIVE_CONTRAST)
     )
-    core_contrast = np.where(candidate, contrast, 0).astype(np.uint8)
-    peak = cv2.dilate(core_contrast, kernel(image.width, CORE_KERNEL_RATIO))
-    ink = candidate & (contrast >= peak * INK_CORE_SHARE)
+    darkness = contrast / np.maximum(background, 1)
+    peak = cv2.dilate(np.where(candidate, darkness, 0).astype(np.float32), kernel(image.width, CORE_KERNEL_RATIO))
+    ink = candidate & (darkness >= peak * INK_CORE_SHARE)
     lab = cv2.cvtColor(np.asarray(image).astype(np.float32) / 255, cv2.COLOR_RGB2LAB)
     light = find_light_lines(luma, lab)
     if not ink.any():
